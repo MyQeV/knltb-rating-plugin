@@ -1,0 +1,638 @@
+/* De rating staat ONDER de naam, niet erachter. Achter de naam duwde hij
+   lange namen weg of kapte ze af; op een eigen regel blijft de naam heel.
+   Een blok-element binnen de inline <a> breekt de regel af — precies wat
+   we willen. De winstkans en de mutatie blijven wél op rijhoogte staan,
+   want die horen bij de wedstrijd en niet bij één speler. */
+.knltb-tags {
+  display: block;
+  margin: 1px 0 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.knltb-tags > * + * {
+  margin-left: 4px;
+}
+
+.knltb-tag {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: help;
+}
+
+.knltb-tag .k {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  opacity: 0.65;
+}
+
+/* enkel = blauw */
+.knltb-tag--single {
+  background: #e8f0fe;
+  color: #174ea6;
+  border-color: #c6d9fb;
+}
+
+/* dubbel = groen, zodat je ze uit elkaar houdt */
+.knltb-tag--double {
+  background: #e6f4ea;
+  color: #137333;
+  border-color: #c3e6cd;
+}
+
+.knltb-tags.guess .knltb-tag {
+  background: #fef7e0;
+  color: #8a6d00;
+  border-color: #fadf8f;
+}
+
+.knltb-tags.loading {
+  display: inline-block;
+  margin: 1px 0 0;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: #f1f3f4;
+  color: #80868b;
+  border: 1px solid #dadce0;
+}
+
+/* rating-mutatie bij een wedstrijd */
+.knltb-delta {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 17px;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: help;
+  border: 1px solid transparent;
+}
+
+/* winst = rating omlaag = sterker */
+.knltb-delta.gain {
+  background: #e6f4ea;
+  color: #137333;
+  border-color: #c3e6cd;
+}
+
+.knltb-delta.drop {
+  background: #fce8e6;
+  color: #a50e0e;
+  border-color: #f5c6c2;
+}
+
+.knltb-delta.open {
+  background: #f1f3f4;
+  color: #5f6368;
+  border-color: #dadce0;
+  font-weight: 500;
+}
+
+/* nog niet gespeeld: klikbaar om zelf een winnaar aan te wijzen */
+.knltb-delta.pickable {
+  cursor: pointer;
+}
+
+.knltb-delta.pickable:hover {
+  outline: 1px solid currentColor;
+  outline-offset: 1px;
+}
+
+/* zelfgekozen uitslag, niet de echte */
+.knltb-delta.picked {
+  border-style: dashed;
+  font-style: italic;
+}
+
+.knltb-summary__reset {
+  margin-left: auto;
+  margin-right: 6px;
+  border: 1px solid #dadce0;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  cursor: pointer;
+  color: #5f6368;
+}
+
+@media (prefers-color-scheme: dark) {
+  .knltb-delta.gain {
+    background: #1b3a26;
+    color: #a0d8b3;
+    border-color: #2b5c3c;
+  }
+  .knltb-delta.drop {
+    background: #3a1e1c;
+    color: #f2a9a3;
+    border-color: #5c2f2b;
+  }
+  .knltb-delta.open {
+    background: #2a2c2e;
+    color: #9aa0a6;
+    border-color: #3c4043;
+  }
+}
+
+/* overzichtspaneel: het hele toernooi doorgerekend */
+.knltb-summary {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483000;
+  width: 380px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 10px 12px 12px;
+  border-radius: 8px;
+  background: #fff;
+  color: #202124;
+  border: 1px solid #dadce0;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.knltb-summary__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eee;
+}
+
+.knltb-summary__close {
+  border: 0;
+  background: none;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: #80868b;
+  padding: 0 2px;
+}
+
+.knltb-summary__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.knltb-summary__table th {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #80868b;
+  text-align: right;
+  padding: 0 0 4px 8px;
+}
+
+.knltb-summary__table th:first-child {
+  text-align: left;
+}
+
+.knltb-summary__table td {
+  padding: 2px 0 2px 8px;
+  vertical-align: baseline;
+}
+
+.knltb-summary__name {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 0 !important;
+  cursor: help;
+}
+
+.knltb-summary__val {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 11px;
+  cursor: help;
+}
+
+.knltb-summary__val.gain { color: #137333; }
+.knltb-summary__val.drop { color: #a50e0e; }
+
+.knltb-summary__note {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #eee;
+  font-size: 10px;
+  color: #5f6368;
+  line-height: 1.4;
+}
+
+@media (prefers-color-scheme: dark) {
+  .knltb-summary {
+    background: #202124;
+    color: #e8eaed;
+    border-color: #3c4043;
+  }
+  .knltb-summary__head,
+  .knltb-summary__note {
+    border-color: #3c4043;
+  }
+  .knltb-summary__note { color: #9aa0a6; }
+  .knltb-summary__val.gain { color: #a0d8b3; }
+  .knltb-summary__val.drop { color: #f2a9a3; }
+}
+
+/* hover-modus: nog niets opgehaald, dus ook niets tonen */
+.knltb-tags.idle {
+  display: none;
+}
+
+.knltb-tags.error {
+  display: inline-block;
+  margin: 1px 0 0;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: #fce8e6;
+  color: #a50e0e;
+  border: 1px solid #f5c6c2;
+}
+
+@media (prefers-color-scheme: dark) {
+  .knltb-tag--single {
+    background: #1c3357;
+    color: #a8c7fa;
+    border-color: #2c4a7c;
+  }
+  .knltb-tag--double {
+    background: #1b3a26;
+    color: #a0d8b3;
+    border-color: #2b5c3c;
+  }
+  .knltb-tags.loading {
+    background: #2a2c2e;
+    color: #9aa0a6;
+    border-color: #3c4043;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .knltb-proj { border-color: #5f6368; color: #9aa0a6; }
+  .knltb-summary__reset { background: #303134; border-color: #3c4043; color: #9aa0a6; }
+}
+
+/* ratingverloop op de profielpagina */
+.knltb-history {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.knltb-spark { display: block; overflow: visible; }
+.knltb-spark.gain { color: #63d297; }
+.knltb-spark.drop { color: #f2a9a3; }
+.knltb-spark.flat { color: currentColor; opacity: 0.7; }
+
+.knltb-history__label {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.knltb-summary__field {
+  margin: -2px 0 8px;
+  font-size: 10px;
+  color: #5f6368;
+  cursor: help;
+}
+
+.knltb-summary__name.is-self {
+  font-weight: 700;
+}
+
+@media (prefers-color-scheme: dark) {
+  .knltb-summary__field { color: #9aa0a6; }
+}
+
+.knltb-summary__val.muted { color: #9aa0a6; }
+
+.knltb-summary__partner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 8px;
+  font-size: 10px;
+  color: #5f6368;
+}
+
+.knltb-summary__partner label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.knltb-summary__partner input {
+  width: 78px;
+  padding: 1px 4px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid #dadce0;
+  border-radius: 3px;
+  background: #fff;
+  color: inherit;
+}
+
+.knltb-summary__partner input.bad { border-color: #a50e0e; }
+.knltb-summary__hint { opacity: 0.8; }
+
+@media (prefers-color-scheme: dark) {
+  .knltb-summary__partner { color: #9aa0a6; }
+  .knltb-summary__partner input { background: #303134; border-color: #3c4043; }
+}
+
+.knltb-summary__partner input.busy {
+  opacity: 0.6;
+  background-image: linear-gradient(90deg, transparent, rgba(23,78,166,.15), transparent);
+}
+
+/* knop naar het volledige dashboard */
+.knltb-dash-btn {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2147483000;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #dadce0;
+  background: #fff;
+  color: #174ea6;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+  opacity: 0.85;
+}
+
+.knltb-dash-btn:hover { opacity: 1; }
+
+@media (prefers-color-scheme: dark) {
+  .knltb-dash-btn { background: #202124; color: #a8c7fa; border-color: #3c4043; }
+}
+
+/* onze som komt overeen met wat de KNLTB zelf toont */
+.knltb-delta.verified::after {
+  content: "✓";
+  margin-left: 4px;
+  opacity: 0.7;
+  font-size: 9px;
+}
+
+/* tijdelijke controle: onze som naast die van de KNLTB */
+.knltb-check {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: help;
+  border: 1px dashed;
+}
+
+.knltb-check.ok { color: #137333; border-color: #86c9a0; background: #e6f4ea; }
+.knltb-check.bad { color: #a50e0e; border-color: #e8a19b; background: #fce8e6; }
+
+@media (prefers-color-scheme: dark) {
+  .knltb-check.ok { color: #a0d8b3; border-color: #2b5c3c; background: #1b3a26; }
+  .knltb-check.bad { color: #f2a9a3; border-color: #5c2f2b; background: #3a1e1c; }
+}
+
+.knltb-delta.wo {
+  font-style: italic;
+  opacity: 0.75;
+}
+
+/* wat het geworden was bij de andere uitslag */
+.knltb-alt {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: help;
+  color: #5f6368;
+  background: #f1f3f4;
+  border: 1px solid #dadce0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .knltb-alt { color: #9aa0a6; background: #2a2c2e; border-color: #3c4043; }
+}
+
+/* stand vóór en ná deze wedstrijd, in plaats van alleen de huidige rating */
+.knltb-tag.step { font-variant-numeric: tabular-nums; }
+
+.knltb-tag.step.up {
+  background: #e6f4ea;
+  color: #137333;
+  border-color: #86c9a0;
+}
+
+.knltb-tag.step.down {
+  background: #fce8e6;
+  color: #a50e0e;
+  border-color: #e8a19b;
+}
+
+@media (prefers-color-scheme: dark) {
+  .knltb-tag.step.up { background: #1b3a26; color: #a0d8b3; border-color: #2b5c3c; }
+  .knltb-tag.step.down { background: #3a1e1c; color: #f2a9a3; border-color: #5c2f2b; }
+}
+
+/* Alles wat de extensie zelf heeft ingevuld: een zelfgekozen winnaar en de
+   duo's die daardoor zijn doorgeschoven. Nadrukkelijk anders dan de rest van
+   de pagina, want dit zijn geen uitslagen maar aannames. */
+.knltb-hypothetisch {
+  position: relative;
+  border-left: 3px solid #174ea6 !important;
+  border-radius: 3px;
+  background: rgba(23, 78, 166, 0.06) !important;
+  padding-left: 6px !important;
+  box-shadow: inset 0 0 0 1px rgba(23, 78, 166, 0.18);
+}
+
+.knltb-hypothetisch .knltb-tag.step {
+  border-style: dashed;
+}
+
+.knltb-hypothetisch .knltb-proj {
+  color: #174ea6;
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .knltb-hypothetisch {
+    border-left-color: #8ab4f8 !important;
+    background: rgba(138, 180, 248, 0.1) !important;
+    box-shadow: inset 0 0 0 1px rgba(138, 180, 248, 0.22);
+  }
+  .knltb-hypothetisch .knltb-proj { color: #8ab4f8; }
+}
+
+/* doorgeschoven speler: zelfde opbouw als de site, alleen herkenbaar gemaakt */
+.knltb-proj {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-style: normal;
+  font-size: inherit;
+  color: inherit;
+  cursor: default;
+}
+
+/* rating waarmee een speler een nog niet gespeelde ronde ingaat */
+.knltb-tag.step.carried {
+  border-style: dotted;
+  opacity: 0.95;
+}
+
+/* cel die de site over heeft in een doorgeschoven rij: niet tonen, anders
+   staat er een blok witruimte boven de namen */
+.knltb-leeg {
+  display: none !important;
+}
+
+/* de mutatie hoort verticaal tussen de namen, net als de W/V-tag van de site */
+.match__row .knltb-delta {
+  align-self: center;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+/* winstkans van deze kant */
+.knltb-odds {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: help;
+  border: 1px solid transparent;
+}
+
+.knltb-odds.fav {
+  background: #e8f0fe;
+  color: #174ea6;
+  border-color: #c6d9fb;
+}
+
+.knltb-odds.under {
+  background: #f1f3f4;
+  color: #80868b;
+  border-color: #dadce0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .knltb-odds.fav { background: #1c3357; color: #a8c7fa; border-color: #2c4a7c; }
+  .knltb-odds.under { background: #2a2c2e; color: #9aa0a6; border-color: #3c4043; }
+}
+
+/* ---- wedstrijden buiten een schema -------------------------------------
+   In een schema staat de rij naast de namen en past er van alles achter.
+   Op de wedstrijdenpagina is de rij zo breed als de halve of hele kaart:
+   chips erachter duwen de namen scheef. Daar krijgen ze een eigen regel,
+   binnen het naamblok.
+
+   Hoe de site die namen uitlijnt, is uit zijn eigen stylesheet gelezen (de
+   diagnose kan dat sinds v2.29). Dat gaat NIET met text-align — die staat
+   overal op `start` — maar met flexbox:
+
+     @media (min-width: 992px) {
+       .match.match--list .match__row              { max-width: 50%; min-width: 50% }
+       .match.match--list .match__row:first-of-type { flex-direction: row-reverse }
+       .match.match--list .match__row:first-of-type .match__row-title-value
+                                                    { flex-direction: row-reverse }
+     }
+
+   Elk team krijgt dus een halve kaart, en de eerste helft draait zijn
+   inhoud om zodat die tegen het midden aan komt. Vandaar dat de namen naar
+   elkaar toe staan terwijl text-align niets doet — precies waarom een
+   eerdere poging, die de tekstuitlijning volgde, de linkerhelft links liet
+   staan terwijl de namen rechts stonden.
+
+   Wij spiegelen diezelfde voorwaarde, met hetzelfde middel: op de helft die
+   de site omdraait, draait ook de chipregel om. row-reverse doet twee dingen
+   tegelijk, en allebei zijn ze hier gewenst — de regel schuift naar de
+   rechterrand (dus naar het midden van de kaart) én de volgorde keert om,
+   zodat het percentage aan de binnenkant komt. Van beide kanten staan de
+   percentages daardoor als eerste tegen het midden, met de mutaties
+   daarbuiten. Overal anders (gestapeld, smal scherm, schema) staan de namen
+   links en de chips dus ook, in gewone volgorde. */
+.knltb-regel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  justify-content: flex-start;
+}
+
+@media (min-width: 992px) {
+  .match--list .match__row:first-of-type .knltb-regel {
+    flex-direction: row-reverse;
+  }
+
+  /* En de ratingbadge onder de naam net zo. Die is een blok binnen de naam,
+     dus hij volgt de tekstuitlijning — en die staat ook op de omgedraaide
+     helft nog op `start`, waardoor de badge links bleef hangen terwijl de
+     naam erboven rechts eindigt. */
+  .match--list .match__row:first-of-type .knltb-tags {
+    text-align: right;
+  }
+}
+
+/* de gap doet de tussenruimte, niet de marge van de chip zelf */
+.knltb-regel > .knltb-odds,
+.knltb-regel > .knltb-delta {
+  margin: 0;
+}

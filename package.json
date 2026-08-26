@@ -1,0 +1,13 @@
+{
+  "name": "knltb-rating-plugin",
+  "private": true,
+  "description": "Browserextensie die de KNLTB enkel- en dubbelrating achter spelersnamen zet op mijnknltb.toernooi.nl",
+  "license": "MIT",
+  "scripts": {
+    "test": "node test/run.js",
+    "pack": "git archive --format=zip -o knltb-rating.zip HEAD manifest.json background.js content.js content.css dss.js parse.js bracket.js history.js popup.html popup.js dashboard.html dashboard.js dashboard.css icons"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}

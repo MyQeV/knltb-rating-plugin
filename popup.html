@@ -1,0 +1,145 @@
+<meta charset="utf-8" />
+<title>KNLTB Rating Inline</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    width: 320px;
+    margin: 0;
+    padding: 14px;
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #fff;
+    color: #202124;
+  }
+  h1 { font-size: 14px; margin: 0 0 2px; }
+  .sub { color: #5f6368; font-size: 11px; margin-bottom: 12px; }
+  label { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  input[type="number"] { width: 64px; }
+  .row { display: flex; gap: 6px; margin-top: 10px; }
+  button {
+    flex: 1;
+    padding: 6px 8px;
+    font-size: 12px;
+    border: 1px solid #dadce0;
+    background: #f8f9fa;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { background: #f1f3f4; }
+  button.primary { background: #174ea6; color: #fff; border-color: #174ea6; }
+  hr { border: 0; border-top: 1px solid #eee; margin: 12px 0; }
+  textarea {
+    width: 100%;
+    height: 130px;
+    font: 10px/1.3 ui-monospace, Menlo, Consolas, monospace;
+    margin-top: 8px;
+    box-sizing: border-box;
+  }
+  .hint { font-size: 11px; color: #5f6368; margin-top: 6px; }
+  .status {
+    border: 1px solid #dadce0;
+    border-radius: 6px;
+    padding: 7px 9px;
+    margin-bottom: 12px;
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+  .status b { font-weight: 600; }
+  .status .wat { color: #5f6368; }
+  .status.doet { border-color: #b7dfc4; background: #f2faf5; }
+  .status.stil { border-color: #e6d8a8; background: #fdfaf0; }
+  .status.uit  { border-color: #f0b7b2; background: #fdf3f2; }
+  #calc { width: 100%; border-collapse: collapse; }
+  #calc td { padding: 2px; }
+  #calc input { width: 100%; box-sizing: border-box; font-size: 12px; padding: 3px 5px; }
+  .calc-lbl { width: 52px; font-size: 11px; color: #5f6368; }
+  .calc-out {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 6px;
+    background: #f8f9fa;
+    font-size: 11px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .calc-out b { font-weight: 600; }
+  .up { color: #137333; font-weight: 600; }
+  .down { color: #a50e0e; font-weight: 600; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #202124; color: #e8eaed; }
+    button { background: #303134; border-color: #3c4043; color: #e8eaed; }
+    .sub, .hint, .calc-lbl { color: #9aa0a6; }
+    .status { border-color: #3c4043; }
+    .status .wat { color: #9aa0a6; }
+    .status.doet { border-color: #2c5c3c; background: #1b2a20; }
+    .status.stil { border-color: #5c4f2c; background: #2a271b; }
+    .status.uit  { border-color: #5c2f2c; background: #2a1c1b; }
+    .calc-out { background: #2a2c2e; }
+    #calc input, textarea, select { background: #303134; color: #e8eaed; border: 1px solid #3c4043; }
+    .up { color: #a0d8b3; }
+    .down { color: #f2a9a3; }
+  }
+</style>
+
+<h1>KNLTB Rating Inline</h1>
+<div class="sub">Ratings achter spelersnamen op mijnknltb.toernooi.nl</div>
+
+<div id="status" class="status">deze pagina wordt bekeken…</div>
+
+<label><input type="checkbox" id="enabled" /> Ingeschakeld</label>
+<label><input type="checkbox" id="showSingle" /> Enkelrating tonen</label>
+<label><input type="checkbox" id="showDouble" /> Dubbelrating tonen</label>
+<label><input type="checkbox" id="showDelta" /> Rating-mutatie bij wedstrijden tonen</label>
+<label><input type="checkbox" id="showHistory" /> Ratingverloop op profielpagina</label>
+<label><input type="checkbox" id="showSummary" /> Paneel met de doorrekening tonen (rechtsonder)</label>
+<label><input type="checkbox" id="showOdds" /> Winstkans per kant tonen</label>
+<label><input type="checkbox" id="showSteps" /> Bij gespeelde wedstrijden de stand vóór → ná tonen</label>
+<label><input type="checkbox" id="showCheck" /> Controle: eigen som naast die van de KNLTB</label>
+<label><input type="checkbox" id="showMeInField" /> Mijzelf in het veld tonen (ook zonder inschrijving)</label>
+<label><input type="checkbox" id="chainTournament" /> Toernooirondes op elkaar stapelen</label>
+<label><input type="checkbox" id="hoverOnly" /> Alleen ophalen bij muis-over</label>
+<label>Max. requests per minuut <input type="number" id="maxPerMinute" min="5" max="240" /></label>
+<label>Gelijktijdig <input type="number" id="concurrency" min="1" max="8" /></label>
+<label><input type="checkbox" id="hideWhenNoRating" /> Badge verbergen als er geen rating is</label>
+<label><input type="checkbox" id="allowGuess" /> Onzekere ratings tonen (geel) — naam wijkt af van het profiel</label>
+<label><input type="checkbox" id="debug" /> Debug-logging in console</label>
+<label>Max. op te halen per scan <input type="number" id="maxLinksPerPage" min="5" max="1000" /></label>
+<label>Cache (uren) <input type="number" id="cacheTtlHours" min="1" max="8760" /></label>
+
+<div class="row">
+  <button class="primary" id="dash">Open dashboard</button>
+</div>
+<div class="row">
+  <button id="rescan">Pagina opnieuw scannen</button>
+  <button id="clear">Cache legen</button>
+</div>
+
+<hr />
+<h1 style="margin-bottom:6px">Rating-calculator</h1>
+<div class="sub" style="margin-bottom:8px">
+  Vul 2 ratings in voor enkel, 4 voor dubbel. Lagere rating = sterker.
+</div>
+
+<table id="calc">
+  <tr>
+    <td class="calc-lbl">Team 1</td>
+    <td><input type="text" id="a1" placeholder="6,0000" inputmode="decimal" /></td>
+    <td><input type="text" id="a2" placeholder="partner" inputmode="decimal" /></td>
+  </tr>
+  <tr>
+    <td class="calc-lbl">Team 2</td>
+    <td><input type="text" id="b1" placeholder="6,5000" inputmode="decimal" /></td>
+    <td><input type="text" id="b2" placeholder="partner" inputmode="decimal" /></td>
+  </tr>
+</table>
+<div id="calcOut" class="calc-out">—</div>
+
+<hr />
+<label style="display:block">Diagnose een specifieke speler-URL (optioneel)</label>
+<input type="text" id="diagUrl" style="width:100%;box-sizing:border-box;font-size:11px"
+       placeholder="https://mijnknltb.toernooi.nl/player-profile/…" />
+<button id="diagnose" style="margin-top:6px">Diagnose</button>
+<div class="hint">Gebruik dit als er geen of verkeerde ratings verschijnen. De uitvoer bevat spelersnamen en je eigen profiel-id — haal weg wat je niet wilt delen voordat je het in een issue plakt.</div>
+<textarea id="out" placeholder="diagnose-uitvoer verschijnt hier"></textarea>
+
+<script src="dss.js"></script>
+<script src="popup.js"></script>

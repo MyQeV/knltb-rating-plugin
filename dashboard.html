@@ -1,0 +1,88 @@
+<meta charset="utf-8" />
+<title>KNLTB Rating — dashboard</title>
+<link rel="stylesheet" href="dashboard.css" />
+
+<header class="top">
+  <h1>KNLTB Rating</h1>
+  <nav class="tabs" id="tabs">
+    <button data-tab="event" class="is-active">Toernooi-verkenner</button>
+    <button data-tab="me">Mijn overzicht</button>
+    <button data-tab="compare">Vergelijker</button>
+    <button data-tab="cache">Opgeslagen spelers</button>
+  </nav>
+  <span class="status" id="status"></span>
+</header>
+
+<main>
+  <!-- ------------------------------------------------ toernooi-verkenner -->
+  <section id="tab-event" class="tab is-active">
+    <div class="bar">
+      <input type="text" id="eventUrl" placeholder="Plak een onderdeel-, schema- of poule-URL van mijnknltb.toernooi.nl" />
+      <button id="eventGo" class="primary">Ophalen</button>
+    </div>
+    <p class="hint">
+      Werkt op <code>/sport/event.aspx?…</code> (inschrijvingen),
+      <code>/tournament/…/draw/N</code> en <code>/sport/draw.aspx?…</code>.
+    </p>
+
+    <div class="panel" id="eventHead" hidden></div>
+
+    <div class="bar bar--sub" id="eventPartnerBar" hidden>
+      <label>Partner
+        <input type="text" id="partner" placeholder="rating of link naar speler" />
+      </label>
+      <span class="muted" id="partnerInfo"></span>
+    </div>
+
+    <table class="grid" id="eventTable" hidden></table>
+    <p class="note" id="eventNote" hidden></p>
+  </section>
+
+  <!-- ---------------------------------------------------- mijn overzicht -->
+  <section id="tab-me" class="tab">
+    <div class="bar">
+      <button id="meLoad" class="primary">Ophalen</button>
+      <span class="muted">Leest je eigen profiel en het tabblad Rating.</span>
+    </div>
+    <div class="cards" id="meCards"></div>
+    <div class="panel" id="meChart" hidden></div>
+  </section>
+
+  <!-- -------------------------------------------------------- vergelijker -->
+  <section id="tab-compare" class="tab">
+    <p class="hint">Een rating (6,4314), een profiellink of een bondsnummer. Twee velden leeg laten voor enkelspel.</p>
+    <table class="compare">
+      <tr>
+        <td class="lbl">Team 1</td>
+        <td><input type="text" id="c-a1" placeholder="jij" /></td>
+        <td><input type="text" id="c-a2" placeholder="partner (leeg = enkel)" /></td>
+      </tr>
+      <tr>
+        <td class="lbl">Team 2</td>
+        <td><input type="text" id="c-b1" placeholder="tegenstander" /></td>
+        <td><input type="text" id="c-b2" placeholder="partner" /></td>
+      </tr>
+    </table>
+    <div class="bar">
+      <button id="compareGo" class="primary">Doorrekenen</button>
+      <button id="compareMe">Vul mijzelf in</button>
+    </div>
+    <div class="panel" id="compareOut" hidden></div>
+  </section>
+
+  <!-- --------------------------------------------------- opgeslagen spelers -->
+  <section id="tab-cache" class="tab">
+    <div class="bar">
+      <input type="search" id="cacheFind" placeholder="Zoek op naam…" />
+      <button id="cacheReload">Vernieuwen</button>
+      <button id="cacheClear" class="danger">Alles wissen</button>
+    </div>
+    <p class="hint" id="cacheInfo"></p>
+    <table class="grid" id="cacheTable"></table>
+  </section>
+</main>
+
+<script src="dss.js"></script>
+<script src="parse.js"></script>
+<script src="history.js"></script>
+<script src="dashboard.js"></script>
