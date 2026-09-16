@@ -322,6 +322,11 @@
 
   const inFlight = new Map();
 
+  /* Eén inlogpagina gezien? Dan levert elk volgend verzoek dezelfde pagina
+     op. Onthouden, en de rest zonder verzoek als "login" afdoen. Gaat weer
+     leeg bij "opnieuw scannen", zodat het na inloggen gewoon werkt. */
+  let loggedOut = false;
+
   /**
    * Leest niet meer van de pagina dan nodig. De rating staat in de kop van
    * het document; zodra we die binnen hebben verbreken we de verbinding.
@@ -363,6 +368,15 @@
   }
 
   async function fetchDoc(url, early = true) {
+    /* De rem telt hier, per verzoek — niet per taak in de wachtrij. Eén taak
+       doet er tot zes: drie kandidaten, een volledige herhaling, twee stappen
+       doorlopen. Na het wachten opnieuw vragen: de bucket is dan met precies
+       één token bijgevuld, en die moet wél afgeboekt worden — anders gaan
+       alle wachtenden tegelijk door zodra er één mag. */
+    for (let w = takeToken(); w > 0; w = takeToken()) {
+      await new Promise((r) => setTimeout(r, w));
+    }
+
     const res = await fetch(url, { credentials: "include", redirect: "follow" });
 
     // Server geeft aan dat het te veel wordt -> stoppen en flink wachten.
@@ -381,6 +395,7 @@
     const html = await readBody(res, early);
 
     if (Site.looksLoggedOut(html)) {
+      loggedOut = true;
       throw new Error("NOT_LOGGED_IN");
     }
 
@@ -397,6 +412,7 @@
    * @param candidates lijst met profiel-URL's om te proberen
    */
   async function fetchRating(key, candidates) {
+    if (loggedOut) throw new Error("NOT_LOGGED_IN");
     if (inFlight.has(key)) return inFlight.get(key);
 
     const p = (async () => {
@@ -545,6 +561,7 @@
   /* ---------------------------------------------------------------
      Wachtrij met rem. Drie lagen:
        1. token bucket  -> nooit meer dan X requests per minuut
+                           (afgeboekt in fetchDoc, per verzoek)
        2. concurrency   -> nooit meer dan Y tegelijk
        3. backoff       -> bij 429/503/5xx even helemaal stil vallen
      --------------------------------------------------------------- */
@@ -602,9 +619,6 @@
     if (pausedUntil > now) return later(pausedUntil - now + 50);
 
     while (running < settings.concurrency && queue.length) {
-      const wait = takeToken();
-      if (wait > 0) return later(wait);
-
       const { task, resolve, reject } = queue.shift();
       running++;
       task()
@@ -3231,6 +3245,7 @@
     summaryClosed = false;
     registry.length = 0;
     laatsteScan = null;
+    loggedOut = false;
   }
 
   /** Het ratingverloop en de dashboardknop staan buiten de wedstrijden om. */
