@@ -154,10 +154,12 @@ try {
 
 ok(!crash, "scripts laden zonder uitzondering", crash ? String(crash) : "");
 ok(fouten.length === 0, "geen fouten tijdens opstarten", fouten.join(" | "));
-ok(!!win.document.getElementById("knltb-dash-btn"), "dashboardknop staat op de pagina");
 
-// de chips worden na een debounce getekend
+// de instellingen komen uit chrome.storage, dus alles op de pagina verschijnt
+// pas ná het laden; de chips bovendien na een debounce
 setTimeout(() => {
+  ok(!!win.document.getElementById("knltb-dash-btn"), "dashboardknop staat op de pagina");
+
   /* Dit is een ratingpagina. Daar toont de site zelf al de mutatie per
      wedstrijd, dus zet de extensie er geen chip per rij bij — het vinkje
      hieronder draagt ons eigen getal. De chips zelf worden getest op de

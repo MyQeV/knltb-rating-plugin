@@ -20,10 +20,12 @@
         "https://*.tournamentsoftware.com/*"
       ],
       "js": [
+        "site.js",
         "dss.js",
         "parse.js",
         "bracket.js",
         "history.js",
+        "diagnose.js",
         "content.js"
       ],
       "css": [

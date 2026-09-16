@@ -11,9 +11,7 @@
 (() => {
   "use strict";
 
-  const SITE = "https://mijnknltb.toernooi.nl";
-  const UUID = "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})";
-  const UUID_ONLY = new RegExp("^" + UUID + "$", "i");
+  const { ORIGIN: SITE, UUID, UUID_ONLY, cacheKey, store } = Site;
 
   const $ = (id) => document.getElementById(id);
   const norm = Parse.norm;
@@ -28,17 +26,6 @@
   };
 
   /* ------------------------------------------------------------- ophalen */
-
-  const cacheKey = (url) => {
-    const m = String(url).match(new RegExp("^(.*/player-profile/)" + UUID + "(.*)$", "i"));
-    return "r:" + (m ? m[1] + m[2].toLowerCase() + m[3] : url);
-  };
-
-  const store = {
-    get: (keys) => new Promise((r) => chrome.storage.local.get(keys, r)),
-    set: (obj) => new Promise((r) => chrome.storage.local.set(obj, r)),
-    remove: (keys) => new Promise((r) => chrome.storage.local.remove(keys, r)),
-  };
 
   let inFlight = 0;
   const MAX_PARALLEL = 6;
@@ -67,7 +54,7 @@
       if (res.status === 429 || res.status === 503) throw new Error("Server is druk (" + res.status + ")");
       if (!res.ok) throw new Error("HTTP " + res.status);
       const html = await res.text();
-      if (/name=["']?password|\/login/i.test(html) && !/rating|speelsterkte/i.test(html)) {
+      if (Site.looksLoggedOut(html)) {
         throw new Error("Je lijkt niet ingelogd op mijnknltb.toernooi.nl");
       }
       const doc = new DOMParser().parseFromString(html, "text/html");

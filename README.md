@@ -46,8 +46,9 @@ npm test
 ```
 
 De tests draaien in Node met jsdom tegen vaste stukjes HTML van de site; er is geen
-login voor nodig. Alleen `layout.test.js` meet in een echte browser en heeft daarvoor
-`playwright` met een Chromium nodig — zonder die wordt hij overgeslagen.
+login voor nodig. Alleen `layout.test.js` meet in een echte browser; die wordt
+overgeslagen tenzij je `npm i -D playwright && npx playwright install chromium` hebt gedaan
+(of `KNLTB_CHROME` naar een eigen Chrome laat wijzen).
 
 Namen, clubs en nummers van andere spelers in de testdata zijn verzonnen; alleen de
 auteur staat er met eigen gegevens in.

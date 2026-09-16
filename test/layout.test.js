@@ -25,19 +25,16 @@ const path = require("path");
 /* Deze test meet in een echte browser; die is niet overal beschikbaar.
    Zonder browser slaan we hem over in plaats van de suite te laten vallen —
    een overgeslagen meting is eerlijker dan een test die niets doet. */
-let chromium, exe;
+let chromium;
 try {
   ({ chromium } = require("playwright"));
-  for (const dir of fs.readdirSync("/opt/pw-browsers")) {
-    const p = "/opt/pw-browsers/" + dir + "/chrome-linux/chrome";
-    if (fs.existsSync(p)) { exe = p; break; }
-  }
 } catch {}
-if (!chromium || !exe) {
-  console.log("  overgeslagen: geen browser beschikbaar");
+const overslaan = (waarom) => {
+  console.log("  overgeslagen: " + waarom);
   console.log("\nalle tests geslaagd");
   process.exit(0);
-}
+};
+if (!chromium) overslaan("playwright niet geïnstalleerd (npm i -D playwright && npx playwright install chromium)");
 
 const eigen = fs.readFileSync(path.join(__dirname, "..", "content.css"), "utf8");
 
@@ -170,7 +167,13 @@ const meet = () => {
 };
 
 (async () => {
-  const b = await chromium.launch({ executablePath: exe });
+  // KNLTB_CHROME wijst desgewenst een eigen Chrome/Chromium aan
+  let b;
+  try {
+    b = await chromium.launch(process.env.KNLTB_CHROME ? { executablePath: process.env.KNLTB_CHROME } : {});
+  } catch {
+    overslaan("geen Chromium voor playwright (npx playwright install chromium)");
+  }
   const laad = async (html, breed) => {
     const p = await b.newPage({ viewport: { width: breed, height: 400 } });
     await p.setContent(`<style>${SITE}\n${eigen}</style>${html}`);

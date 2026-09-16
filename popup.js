@@ -98,7 +98,7 @@ async function toonStatus() {
 
 toonStatus();
 
-chrome.storage.local.get("settings", (obj) => {
+Site.store.get("settings").then((obj) => {
   const s = { ...DEFAULTS, ...(obj.settings || {}) };
   for (const f of FIELDS) {
     const el = document.getElementById(f);
@@ -108,7 +108,7 @@ chrome.storage.local.get("settings", (obj) => {
 });
 
 function save() {
-  chrome.storage.local.get("settings", (obj) => {
+  Site.store.get("settings").then((obj) => {
     const s = { ...DEFAULTS, ...(obj.settings || {}) };
     for (const f of FIELDS) {
       const el = document.getElementById(f);
@@ -126,7 +126,7 @@ function save() {
         el.value = s[f];
       }
     }
-    chrome.storage.local.set({ settings: s }, () => send({ type: "settings", settings: s }));
+    Site.store.set({ settings: s }).then(() => send({ type: "settings", settings: s }));
   });
 }
 
@@ -165,14 +165,11 @@ document.getElementById("rescan").addEventListener("click", async () => {
     "\n" + r.tags + " badges, " + r.chips + " mutaties op de pagina";
 });
 
-document.getElementById("clear").addEventListener("click", () => {
-  chrome.storage.local.get(null, (all) => {
-    const keys = Object.keys(all).filter((k) => k.startsWith("r:"));
-    chrome.storage.local.remove(keys, async () => {
-      out.value = keys.length + " gecachte spelers gewist — pagina wordt opnieuw gescand.";
-      await send({ type: "rescan" });
-    });
-  });
+document.getElementById("clear").addEventListener("click", async () => {
+  const keys = Object.keys(await Site.store.get(null)).filter((k) => k.startsWith("r:"));
+  await Site.store.remove(keys);
+  out.value = keys.length + " gecachte spelers gewist — pagina wordt opnieuw gescand.";
+  await send({ type: "rescan" });
 });
 
 /* ------------------------------------------------------------ calculator */
