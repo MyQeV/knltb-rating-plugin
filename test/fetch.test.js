@@ -56,15 +56,36 @@ const profiel = (s) => `${kop(s)}
     <span title="Enkel" class="tag-duo"><span class="tag-duo__title">6</span><span class="tag-duo__value">${s.rating}</span></span>
   </div></div></div>`;
 
-// profiel zónder rating, met alleen een tabblad ernaartoe
-const profielZonder = (s) => `${kop(s)}</div></div>
-  <ul class="tabs"><li><a href="/player-profile/${s.uuid}/Rating">Rating</a></li></ul>`;
+// profiel zónder rating, in twee stukken: de kop tot de markering waarop de
+// lezer stopt, en daarachter alleen een tabblad naar de rating
+const profielZonder = (s) => [
+  `${kop(s)}</div></div><div id="page_content_profile">`,
+  `<ul class="tabs"><li><a href="/player-profile/${s.uuid}/Rating">Rating</a></li></ul></div>`,
+];
 
 const antwoord = (url, html) =>
   Promise.resolve({
     ok: true, status: 200, url: String(url),
     headers: { get: () => null }, text: () => Promise.resolve(html),
   });
+
+/* Hetzelfde, maar als stroom in stukken — zo leest readBody hem echt, en
+   breekt hij af zodra hij genoeg heeft. */
+const stroom = (url, stukken) => {
+  let i = 0;
+  return Promise.resolve({
+    ok: true, status: 200, url: String(url),
+    headers: { get: () => null },
+    text: () => Promise.resolve(stukken.join("")),
+    body: {
+      getReader: () => ({
+        read: () =>
+          Promise.resolve(i < stukken.length ? { done: false, value: Buffer.from(stukken[i++]) } : { done: true }),
+        cancel: () => Promise.resolve(),
+      }),
+    },
+  });
+};
 
 /** Eén pagina, met het Chrome-decor dat jsdom niet heeft. */
 function venster(nrs, instellingen, opHaal) {
@@ -96,6 +117,7 @@ function venster(nrs, instellingen, opHaal) {
     unobserve() {}
     disconnect() {}
   };
+  win.TextDecoder = TextDecoder; // jsdom heeft hem niet, de stroomlezer wel nodig
 
   const opgehaald = [];
   win.fetch = (url) => {
@@ -169,7 +191,7 @@ const spelerVan = (url) => {
   const ophaalG = (url) => {
     const s = SPELERS[7];
     if (/\/Rating$/i.test(url)) return antwoord(url, profiel(s));
-    return antwoord(url, profielZonder(s));
+    return stroom(url, profielZonder(s));
   };
 
   const b = venster([7], { maxPerMinute: 2 }, ophaalG);

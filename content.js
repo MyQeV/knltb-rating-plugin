@@ -270,8 +270,12 @@
     return hit;
   }
 
-  function setCached(url, data) {
-    Site.store.set({ [cacheKey(url)]: { ...data, ts: Date.now() } }).catch((e) => {
+  /** Hetzelfde record onder elk van de namen, in één schrijfactie. */
+  function setCached(urls, data) {
+    const rec = { ...data, ts: Date.now() };
+    const obj = {};
+    for (const url of urls) if (url) obj[cacheKey(url)] = rec;
+    Site.store.set(obj).catch((e) => {
       // vol of anderszins geweigerd: niet stilzwijgend voorbijgaan
       log("opslaan mislukt:", e.message);
       pruneCache(true);
@@ -287,35 +291,46 @@
   const PRUNE_EVERY_MS = 6 * 36e5;
   const MAX_ENTRIES = 5000;
 
+  /* Een volle opslag weigert alle schrijfacties tegelijk; die mogen samen
+     één opruimbeurt aanzwengelen, niet elk hun eigen. */
+  let pruning = false;
+
   async function pruneCache(force = false) {
-    const now = Date.now();
-    const { prunedAt } = await Site.store.get("prunedAt");
-    if (!force && prunedAt && now - prunedAt < PRUNE_EVERY_MS) return;
+    if (pruning) return;
+    pruning = true;
+    try {
+      const now = Date.now();
+      const { prunedAt } = await Site.store.get("prunedAt");
+      if (!force && prunedAt && now - prunedAt < PRUNE_EVERY_MS) return;
 
-    Site.store.set({ prunedAt: now });
+      Site.store.set({ prunedAt: now });
 
-    const all = await Site.store.get(null);
-    const ttl = Math.max(1, settings.cacheTtlHours) * 36e5;
-    const entries = Object.keys(all).filter((k) => k.startsWith("r:"));
+      const all = await Site.store.get(null);
+      const ttl = Math.max(1, settings.cacheTtlHours) * 36e5;
+      const entries = Object.keys(all).filter((k) => k.startsWith("r:"));
 
-    // verlopen of beschadigd
-    const dead = entries.filter((k) => {
-      const v = all[k];
-      return !v || typeof v.ts !== "number" || now - v.ts > ttl;
-    });
+      // verlopen of beschadigd
+      const dead = entries.filter((k) => {
+        const v = all[k];
+        return !v || typeof v.ts !== "number" || now - v.ts > ttl;
+      });
 
-    // en als het er dan nog te veel zijn: de oudste eruit
-    const alive = entries.filter((k) => !dead.includes(k));
-    if (alive.length > MAX_ENTRIES) {
-      alive
-        .sort((a, b) => all[a].ts - all[b].ts)
-        .slice(0, alive.length - MAX_ENTRIES)
-        .forEach((k) => dead.push(k));
+      // en als het er dan nog te veel zijn: de oudste eruit
+      const deadSet = new Set(dead);
+      const alive = entries.filter((k) => !deadSet.has(k));
+      if (alive.length > MAX_ENTRIES) {
+        alive
+          .sort((a, b) => all[a].ts - all[b].ts)
+          .slice(0, alive.length - MAX_ENTRIES)
+          .forEach((k) => dead.push(k));
+      }
+
+      if (!dead.length) return;
+      await Site.store.remove(dead);
+      log("cache opgeruimd:", dead.length, "van", entries.length);
+    } finally {
+      pruning = false;
     }
-
-    if (!dead.length) return;
-    await Site.store.remove(dead);
-    log("cache opgeruimd:", dead.length, "van", entries.length);
   }
 
   // ---------------------------------------------------------------- fetching
@@ -344,17 +359,21 @@
   }
 
   async function readBody(res, early) {
-    if (!early || !res.body || !res.body.getReader) return res.text();
+    if (!early || !res.body || !res.body.getReader) {
+      return { html: await res.text(), truncated: false };
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buf = "";
+    let done = false;
 
     try {
       for (;;) {
-        const { done, value } = await reader.read();
+        const chunk = await reader.read();
+        done = chunk.done;
         if (done) break;
-        buf += decoder.decode(value, { stream: true });
+        buf += decoder.decode(chunk.value, { stream: true });
         if (buf.length > MAX_BYTES || seenEnough(buf)) break;
       }
     } finally {
@@ -364,7 +383,8 @@
         /* verbinding was al klaar */
       }
     }
-    return buf;
+    // niet tot het einde gelezen? dan kan er nog iets ongelezen zijn gebleven
+    return { html: buf, truncated: !done };
   }
 
   async function fetchDoc(url, early = true) {
@@ -375,6 +395,17 @@
        alle wachtenden tegelijk door zodra er één mag. */
     for (let w = takeToken(); w > 0; w = takeToken()) {
       await new Promise((r) => setTimeout(r, w));
+    }
+
+    /* Wie hier gewacht heeft, weet niet wat er intussen gebeurd is: een
+       ander verzoek kan de inlogpagina hebben gezien, of de server heeft
+       teruggeduwd. Dan niet alsnog gaan — de pauze uitzitten, zoals de
+       wachtrij dat met een nog niet gestarte taak doet. */
+    for (;;) {
+      if (loggedOut) throw new Error("NOT_LOGGED_IN");
+      const p = pausedUntil - Date.now();
+      if (p <= 0) break;
+      await new Promise((r) => setTimeout(r, p + 50));
     }
 
     const res = await fetch(url, { credentials: "include", redirect: "follow" });
@@ -392,7 +423,7 @@
 
     if (!res.ok) return null;
 
-    const html = await readBody(res, early);
+    const { html, truncated } = await readBody(res, early);
 
     if (Site.looksLoggedOut(html)) {
       loggedOut = true;
@@ -403,7 +434,7 @@
     // res.url is de URL ná de redirect; /player/<org>/<token> landt op
     // /player-profile/<uuid>. Die willen we als cachesleutel gebruiken.
     doc.__url = res.url || url;
-    doc.__truncated = early && html.length < (Number(res.headers.get("content-length")) || Infinity);
+    doc.__truncated = truncated;
     return doc;
   }
 
@@ -412,7 +443,6 @@
    * @param candidates lijst met profiel-URL's om te proberen
    */
   async function fetchRating(key, candidates) {
-    if (loggedOut) throw new Error("NOT_LOGGED_IN");
     if (inFlight.has(key)) return inFlight.get(key);
 
     const p = (async () => {
@@ -421,6 +451,8 @@
         if (cached.none) throw new Error("NO_RATING_FOUND");
         return { ...cached, fromCache: true };
       }
+      // wat al bekend is mag getoond worden; alleen ophalen heeft geen zin
+      if (loggedOut) throw new Error("NOT_LOGGED_IN");
 
       const seen = new Set();
       let sawPage = false; // hebben we überhaupt een pagina te zien gekregen?
@@ -501,7 +533,7 @@
            daadwerkelijk hebben gezien. Een 403 of 404 door een tijdelijke
            storing mag geen 8 uur lang als "deze speler heeft geen rating"
            in de cache blijven staan. */
-        if (sawPage) setCached(key, { none: true });
+        if (sawPage) setCached([key], { none: true });
         throw new Error("NO_RATING_FOUND");
       }
       /* Onder alle namen bewaren waaronder deze speler te vinden is:
@@ -509,10 +541,7 @@
          profiel-URL. Waar je hem hierna ook tegenkomt, hij is bekend. */
       // fromCache/ts horen niet in de opslag thuis
       const { fromCache, ts, ...store } = data;
-      setCached(key, store);
-      for (const alias of [...candidates, data.via]) {
-        if (alias && cacheKey(alias) !== cacheKey(key)) setCached(alias, store);
-      }
+      setCached([key, ...candidates, data.via], store);
       return data;
     })();
 

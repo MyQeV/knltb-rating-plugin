@@ -104,8 +104,8 @@
 
     const via = doc.__url || url;
     const rec = { ...data, via };
-    await store.set({ [cacheKey(key.slice(2))]: { ...rec, ts: Date.now() } });
-    await store.set({ [cacheKey(via)]: { ...rec, ts: Date.now() } });
+    const bewaard = { ...rec, ts: Date.now() };
+    await store.set({ [key]: bewaard, [cacheKey(via)]: bewaard });
     return rec;
   }
 
