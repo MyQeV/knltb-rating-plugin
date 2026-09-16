@@ -14,38 +14,7 @@
 (() => {
   "use strict";
 
-  const DEFAULTS = {
-    enabled: true,
-    showSingle: true,
-    showDouble: true,
-    hideWhenNoRating: true, // badge weghalen als het geen speler blijkt
-    allowGuess: false, // "geraden" ratings tonen (label niet herkend)
-    showDelta: true, // rating-mutatie bij winst/verlies tonen (DSS)
-    showHistory: true, // ratingverloop op je profielpagina
-    showCheck: true, // eigen som naast die van de KNLTB (Rating-tabblad)
-    showSteps: true, // in een gespeelde wedstrijd de stand vóór en ná tonen
-    showSummary: true, // het paneel rechtsonder met de doorrekening
-    showOdds: true, // winstkans per kant als badge bij de wedstrijd
-    showMeInField: true, // jezelf in een veld zetten waar je niet in staat
-    partnerRating: null, // dubbelpartner om mee te rekenen (leeg = gelijke sterkte)
-    partnerName: null, // naam erbij, als hij via een link is opgezocht
-    chainTournament: true, // rondes van een toernooi op elkaar stapelen
-    debug: false,
-
-    // Alleen ophalen als je met de muis over een naam gaat.
-    // Uit = ophalen zodra de naam in beeld scrolt.
-    hoverOnly: false,
-
-    maxLinksPerPage: 200,
-    // 6 = precies wat een browser zelf per host openzet bij een paginaload.
-    concurrency: 6,
-    requestDelayMs: 0, // geen kunstmatige pauze
-    maxPerMinute: 60, // vangnet, geen rem bij normaal gebruik
-    // Ratings worden bijgewerkt zodra een toernooi is afgerond, en dat moment
-    // is van buitenaf niet te zien. Daarom kort: binnen een sessie scheelt het
-    // alle herhaling, en morgen kijkt hij gewoon opnieuw.
-    cacheTtlHours: 8,
-  };
+  const DEFAULTS = Site.DEFAULTS;
 
   let settings = { ...DEFAULTS };
 
@@ -56,12 +25,9 @@
 
   const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
 
-  // rating ziet eruit als 6.31 / 6,3125 / 10.00  (bereik 1 t/m 10)
-  const NUM_RE_G = /(?:^|[^\d.,])((?:10|[1-9])[.,]\d{1,4})(?![\d])/g;
-
-
   const toNumber = (s) => parseFloat(String(s).replace(",", "."));
-  const fmt4 = (n) => (n == null || !isFinite(n) ? "—" : n.toFixed(4).replace(".", ","));
+  const f4 = Site.f4;
+  const signed = Site.signed;
   const fmt = (n) => (n == null ? null : n.toFixed(2).replace(".", ","));
 
   function log(...args) {
@@ -121,13 +87,9 @@
     return null;
   }
 
-  const UUID_ONLY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const UUID_ONLY = Site.UUID_ONLY;
   const profileUrl = (id) => location.origin + "/player-profile/" + id;
-
-  /** Alleen deze pagina's zijn een betrouwbare bron voor een rating. */
-  const isProfileUrl = (url) =>
-    /\/player-profile\/[0-9a-f-]{36}/i.test(url) ||
-    /\/player\/[0-9a-f-]{36}\/[A-Za-z0-9+/=]{8,}/i.test(url);
+  const isProfileUrl = Site.isProfileUrl;
 
   /* De H2H-knop bij elke wedstrijd bevat de bondsnummers van alle spelers:
        /head-2-head?OrganizationCode=<org>&T1P1MemberID=30340969&T1P2…
@@ -694,20 +656,7 @@
     return el;
   }
 
-  /** "Mike Verhaar [2]" en "Mike Verhaar" horen bij elkaar. */
-  function sameName(a, b) {
-    const clean = (s) =>
-      norm(String(s || ""))
-        .replace(/\[[^\]]*\]/g, "")
-        .replace(/[^\p{L}\p{N} ]/gu, "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toLowerCase();
-    const x = clean(a);
-    const y = clean(b);
-    if (!x || !y) return true; // niets te vergelijken -> niet zeuren
-    return x === y || x.includes(y) || y.includes(x);
-  }
+  const sameName = Site.sameName;
 
   /** Rendert twee losse tags: S:7,8265 en D:5,7033 */
   function renderTags(holder, data, expectedName) {
@@ -1080,9 +1029,6 @@
     return norm(copy.textContent).replace(/\[[^\]]*\]/g, "").trim();
   }
 
-  const signed = (n) =>
-    (n > 1e-9 ? "+" : n < -1e-9 ? "−" : "±") + Math.abs(n).toFixed(4).replace(".", ",");
-
   /**
    * Winstkans van deze kant als badge. Stond alleen in de tooltip, maar
    * juist dit getal verklaart waarom de mutaties zo scheef liggen: bij 28%
@@ -1154,8 +1100,6 @@
         (ratingOf.has(a) || ratingAtMatch(a) != null)
     );
   }
-
-  const f4 = (n) => (n == null || !isFinite(n) ? "—" : n.toFixed(4).replace(".", ","));
 
   /** Identiteit van een speler, om zijn rating door het toernooi te volgen. */
   function playerKey(a) {
@@ -1618,7 +1562,7 @@
               makeTag(
                 disc === "D" ? "double" : "single",
                 disc === "D" ? "D" : "S",
-                fmt4(speler.start),
+                f4(speler.start),
                 speler.name + " — doorgeschoven op basis van jouw keuze"
               )
             );
@@ -2567,47 +2511,15 @@
   }
 
   /**
-   * Partnerinvoer begrijpen. Een getal is een rating; al het andere wordt
-   * als verwijzing naar een speler gelezen en opgezocht:
-   *   https://mijnknltb.toernooi.nl/player-profile/<uuid>
-   *   /player-profile/<uuid>   ·   <uuid>
-   *   /sport/player.aspx?id=…&player=N
-   *   30340969                 (bondsnummer)
+   * Partnerinvoer begrijpen (zie Site.parsePlayerInput): een rating is
+   * meteen klaar, een verwijzing naar een speler wordt opgezocht.
    */
   async function resolvePartner(text) {
-    const t = norm(text);
-    if (!t) return { rating: null, name: null };
+    const p = Site.parsePlayerInput(text, pageOrgCode());
+    if (!p) return { rating: null, name: null };
+    if (p.rating != null) return { rating: p.rating, name: null };
 
-    // een rating: hooguit twee cijfers voor de komma
-    if (/^\d{1,2}([.,]\d{1,4})?$/.test(t)) {
-      const v = toNumber(t);
-      if (isFinite(v) && v >= 1 && v <= 10) return { rating: v, name: null };
-      throw new Error("BUITEN_BEREIK");
-    }
-
-    let url = null;
-
-    if (UUID_ONLY.test(t)) {
-      url = profileUrl(t.toLowerCase());
-    } else if (/^\d{5,10}$/.test(t)) {
-      const org = pageOrgCode();
-      if (!org) throw new Error("GEEN_ORG");
-      url = memberUrl(org, t);
-    } else if (/[/?]/.test(t)) {
-      // alleen iets dat op een pad of adres lijkt; losse tekst is geen link
-      let u;
-      try {
-        u = new URL(t, location.origin);
-      } catch {
-        throw new Error("ONBEGREPEN");
-      }
-      if (u.origin !== location.origin) throw new Error("ANDERE_SITE");
-      url = u.href;
-    } else {
-      throw new Error("ONBEGREPEN");
-    }
-
-    const data = await enqueue(() => fetchRating(url, [url]));
+    const data = await enqueue(() => fetchRating(p.url, [p.url]));
     if (!data || data.double == null || !isFinite(data.double)) throw new Error("GEEN_DUBBEL");
     return { rating: data.double, name: data.name || null };
   }
@@ -2671,27 +2583,19 @@
 
   /** Het profiel van de ingelogde gebruiker staat in het menu rechtsboven. */
   function ownProfileKey() {
-    const a =
-      document.querySelector('.dropdown-list a[href*="/player-profile/"]') ||
-      document.querySelector('a[title="Mijn profiel"][href*="/player-profile/"]');
-    if (!a) return null;
-    try {
-      return cacheKey(new URL(a.getAttribute("href"), location.href).href);
-    } catch {
-      return null;
-    }
+    const u = ownProfileUrl();
+    return u && cacheKey(u);
   }
 
   /** Kengetallen van het deelnemersveld. */
   function fieldStats(rows) {
     const vals = rows.map((r) => r.start).filter((v) => isFinite(v)).sort((a, b) => a - b);
     if (vals.length < 2) return null;
-    const mid = Math.floor(vals.length / 2);
     return {
       n: vals.length,
       best: vals[0],
       worst: vals[vals.length - 1],
-      median: vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2,
+      median: Site.median(vals),
     };
   }
 
@@ -3433,7 +3337,7 @@
     if (msg.type === "diagnose") {
       Diagnose.run(
         {
-          registry, ratedAnchors, ratingOf, norm, NUM_RE_G, playerIdFromHref,
+          registry, ratedAnchors, ratingOf, playerIdFromHref,
           parsePlayerDoc, subjectOfPage, officialDelta, isWalkover,
           collectMatches, isDrawPage, projectBrackets,
         },

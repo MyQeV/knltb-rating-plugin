@@ -1,34 +1,8 @@
-const DEFAULTS = {
-  enabled: true,
-  showSingle: true,
-  showDouble: true,
-  hideWhenNoRating: true,
-  allowGuess: false,
-  showDelta: true,
-  showHistory: true,
-  showCheck: true,
-  showSteps: true,
-  showSummary: true,
-  showOdds: true,
-  showMeInField: true,
-  partnerRating: null,
-  partnerName: null,
-  chainTournament: true,
-  debug: false,
-  hoverOnly: false,
-  maxLinksPerPage: 200,
-  concurrency: 6,
-  requestDelayMs: 0,
-  maxPerMinute: 60,
-  cacheTtlHours: 8,
-};
-
 const FIELDS = [
   "enabled", "showSingle", "showDouble", "showDelta", "showHistory", "showCheck", "showSteps", "showSummary", "showOdds", "showMeInField", "chainTournament", "hoverOnly",
   "hideWhenNoRating", "allowGuess", "debug", "maxLinksPerPage",
   "maxPerMinute", "concurrency", "cacheTtlHours",
 ];
-const TEXT_FIELDS = new Set();
 const out = document.getElementById("out");
 
 function activeTab() {
@@ -99,7 +73,7 @@ async function toonStatus() {
 toonStatus();
 
 Site.store.get("settings").then((obj) => {
-  const s = { ...DEFAULTS, ...(obj.settings || {}) };
+  const s = { ...Site.DEFAULTS, ...(obj.settings || {}) };
   for (const f of FIELDS) {
     const el = document.getElementById(f);
     if (el.type === "checkbox") el.checked = !!s[f];
@@ -109,20 +83,18 @@ Site.store.get("settings").then((obj) => {
 
 function save() {
   Site.store.get("settings").then((obj) => {
-    const s = { ...DEFAULTS, ...(obj.settings || {}) };
+    const s = { ...Site.DEFAULTS, ...(obj.settings || {}) };
     for (const f of FIELDS) {
       const el = document.getElementById(f);
       if (el.type === "checkbox") {
         s[f] = el.checked;
-      } else if (TEXT_FIELDS.has(f)) {
-        s[f] = el.value;
       } else {
         // een leeggemaakt getalveld gaf Number("") === 0, en concurrency 0
         // liet de wachtrij voorgoed stilstaan
         const lo = el.min !== "" ? Number(el.min) : 1;
         const hi = el.max !== "" ? Number(el.max) : Infinity;
         const v = Number(el.value);
-        s[f] = !isFinite(v) || v === 0 ? DEFAULTS[f] : Math.min(hi, Math.max(lo, v));
+        s[f] = !isFinite(v) || v === 0 ? Site.DEFAULTS[f] : Math.min(hi, Math.max(lo, v));
         el.value = s[f];
       }
     }
@@ -184,8 +156,8 @@ const num = (id) => {
   return isFinite(n) && n > 0 && n <= 10 ? n : null;
 };
 
-const f4 = (n) => n.toFixed(4).replace(".", ",");
-const sgn = (n) => (n > 0 ? "+" : "−") + Math.abs(n).toFixed(4).replace(".", ",");
+const f4 = Site.f4;
+const signed = Site.signed;
 
 function calc() {
   const a = [num("a1"), num("a2")].filter((x) => x != null);
@@ -217,8 +189,8 @@ function calc() {
       const who = ratings.length > 1 ? `speler ${i + 1} ` : "";
       rows.push(
         `  ${who}${f4(r)} → bij winst <span class="up">${f4(r + side.onWin)}</span> ` +
-          `(${sgn(side.onWin)}), bij verlies <span class="down">${f4(r + side.onLoss)}</span> ` +
-          `(${sgn(side.onLoss)})`
+          `(${signed(side.onWin)}), bij verlies <span class="down">${f4(r + side.onLoss)}</span> ` +
+          `(${signed(side.onLoss)})`
       );
     });
   });

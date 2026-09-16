@@ -10,10 +10,11 @@ const Diagnose = (() => {
 
   async function run(ctx, forcedUrl) {
     const {
-      registry, ratedAnchors, ratingOf, norm, NUM_RE_G, playerIdFromHref,
+      registry, ratedAnchors, ratingOf, playerIdFromHref,
       parsePlayerDoc, subjectOfPage, officialDelta, isWalkover,
       collectMatches, isDrawPage, projectBrackets,
     } = ctx;
+    const { norm, NUM_RE_G } = Parse;
 
     const anchors = [...document.querySelectorAll("a[href]")];
     const candidates = anchors.filter((a) => {

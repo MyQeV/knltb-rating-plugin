@@ -11,13 +11,10 @@
 (() => {
   "use strict";
 
-  const { ORIGIN: SITE, UUID, UUID_ONLY, cacheKey, store } = Site;
+  const { ORIGIN: SITE, UUID, cacheKey, store, f4, signed, isProfileUrl, sameName, median } = Site;
 
   const $ = (id) => document.getElementById(id);
   const norm = Parse.norm;
-  const f4 = (n) => (n == null || !isFinite(n) ? "—" : n.toFixed(4).replace(".", ","));
-  const signed = (n) =>
-    (n > 1e-9 ? "+" : n < -1e-9 ? "−" : "±") + Math.abs(n).toFixed(4).replace(".", ",");
 
   let settings = {};
 
@@ -65,10 +62,6 @@
     }
   }
 
-  const isProfileUrl = (u) =>
-    new RegExp("/player-profile/[0-9a-f-]{36}", "i").test(u) ||
-    new RegExp("/player/[0-9a-f-]{36}/[A-Za-z0-9+/=]{8,}", "i").test(u);
-
   /** Rating van een speler, via dezelfde cache als het content script. */
   async function ratingFor(url) {
     const ttl = (settings.cacheTtlHours || 8) * 36e5;
@@ -109,33 +102,30 @@
     return rec;
   }
 
+  // de foutcodes van Site.parsePlayerInput, in woorden
+  const INVOER_FOUT = {
+    BUITEN_BEREIK: "Een rating ligt tussen 1 en 10",
+    ANDERE_SITE: "Alleen links van mijnknltb.toernooi.nl",
+    ONBEGREPEN: "Niet herkend als rating, link of bondsnummer",
+  };
+
   /** Invoer begrijpen: rating, uuid, bondsnummer of link. */
   async function resolveInput(text) {
-    const t = norm(text);
-    if (!t) return null;
-
-    if (/^\d{1,2}([.,]\d{1,4})?$/.test(t)) {
-      const v = Parse.toNumber(t);
-      if (isFinite(v) && v >= 1 && v <= 10) return { rating: v, name: null };
-      throw new Error("Een rating ligt tussen 1 en 10");
+    let p;
+    try {
+      p = Site.parsePlayerInput(text, ORG);
+    } catch (err) {
+      throw new Error(INVOER_FOUT[err.message] || err.message);
     }
+    if (!p) return null;
+    if (p.rating != null) return { rating: p.rating, name: null };
 
-    let url;
-    if (UUID_ONLY.test(t)) url = SITE + "/player-profile/" + t.toLowerCase();
-    else if (/^\d{5,10}$/.test(t)) url = SITE + "/player/" + orgCode() + "/" + btoa("base64:" + t);
-    else if (/[/?]/.test(t)) {
-      const u = new URL(t, SITE);
-      if (u.origin !== SITE) throw new Error("Alleen links van mijnknltb.toernooi.nl");
-      url = u.href;
-    } else throw new Error("Niet herkend als rating, link of bondsnummer");
-
-    const d = await ratingFor(url);
-    return { rating: null, data: d, name: d.name, url };
+    const d = await ratingFor(p.url);
+    return { rating: null, data: d, name: d.name, url: p.url };
   }
 
   // KNLTB als organisatie; komt uit de links die de site zelf gebruikt
   const ORG = "630BAE5F-36FE-42EA-A2E5-999630ABFEB8";
-  const orgCode = () => settings.orgCode || ORG;
 
   /* ------------------------------------------------- toernooi-verkenner */
 
@@ -257,23 +247,6 @@
     });
   }
 
-  /* Zelfde regels als in content.js: plaatsingscijfers eruit, daarna de
-     spaties opnieuw samentrekken (anders houdt "Mike [2] Verhaar" een dubbele
-     spatie over), en niets te vergelijken betekent geen bezwaar. */
-  const sameName = (a, b) => {
-    const c = (s) =>
-      norm(s || "")
-        .replace(/\[[^\]]*\]/g, "")
-        .replace(/[^\p{L}\p{N} ]/gu, "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toLowerCase();
-    const x = c(a);
-    const y = c(b);
-    if (!x || !y) return true;
-    return x === y || x.includes(y) || y.includes(x);
-  };
-
   const partnerRating = () => {
     const v = settings.partnerRating;
     return v != null && isFinite(v) && v >= 1 && v <= 10 ? v : null;
@@ -292,8 +265,6 @@
 
     const me = rows.find((r) => r.isSelf);
     const vals = rows.map((r) => r.start).sort((a, b) => a - b);
-    const mid = Math.floor(vals.length / 2);
-    const median = vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
 
     const head = $("eventHead");
     head.hidden = false;
@@ -309,7 +280,7 @@
       (field.disc === "D" ? "Dubbel" : "Enkel") +
       " · " + rows.length + " deelnemers" +
       " · sterkste " + f4(vals[0]) +
-      " · mediaan " + f4(median) +
+      " · mediaan " + f4(median(vals)) +
       " · zwakste " + f4(vals[vals.length - 1]) +
       (me ? "  ·  jij " + me.rank + "e" + (me.virtual ? " (niet ingeschreven)" : "") : "");
     head.appendChild(sub);
