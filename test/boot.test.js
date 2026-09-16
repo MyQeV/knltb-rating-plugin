@@ -155,6 +155,38 @@ try {
 ok(!crash, "scripts laden zonder uitzondering", crash ? String(crash) : "");
 ok(fouten.length === 0, "geen fouten tijdens opstarten", fouten.join(" | "));
 
+/* Dezelfde pagina nog eens, maar nu faalt een onderdeel asynchroon: het
+   opruimen van de cache leest als enige de hele opslag in, en die gooit hier.
+   Dat hoort gemeld te worden als elke andere opstartfout, en de onderdelen
+   erna — de dashboardknop — horen gewoon door te gaan. */
+const win2 = new JSDOM(PAGINA, {
+  url: "https://mijnknltb.toernooi.nl/player-profile/13e57c28-14f9-424e-83c4-c7e96c9546a7/Rating",
+  pretendToBeVisual: true,
+  runScripts: "outside-only",
+}).window;
+win2.chrome = {
+  runtime: win.chrome.runtime,
+  storage: {
+    local: {
+      get(keys, cb) {
+        if (keys === null) throw new Error("opslag kapot");
+        cb({});
+      },
+      set(obj, cb) {
+        if (cb) cb();
+      },
+      remove(keys, cb) {
+        if (cb) cb();
+      },
+    },
+  },
+};
+win2.IntersectionObserver = win.IntersectionObserver;
+win2.fetch = win.fetch;
+const fouten2 = [];
+win2.console.error = (...a) => fouten2.push(a.join(" "));
+win2.eval(code);
+
 // de instellingen komen uit chrome.storage, dus alles op de pagina verschijnt
 // pas ná het laden; de chips bovendien na een debounce
 setTimeout(() => {
@@ -195,6 +227,11 @@ setTimeout(() => {
      gewoon ? String(gewoon.dataset.knltbDelta) : "geen blok");
 
   ok(fouten.length === 0, "nog steeds geen fouten", fouten.join(" | "));
+
+  ok(fouten2.join(" | ") === "[KNLTB] cache opruimen mislukt: Error: opslag kapot",
+     "een asynchroon falend onderdeel wordt gemeld", fouten2.join(" | ") || "niets gemeld");
+  ok(!!win2.document.getElementById("knltb-dash-btn"), "en houdt de dashboardknop niet tegen");
+
   console.log(fail ? "\n" + fail + " test(s) mislukt" : "\nalle tests geslaagd");
   process.exit(fail ? 1 : 0);
 }, 900);

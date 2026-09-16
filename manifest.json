@@ -4,20 +4,15 @@
   "version": "2.34.0",
   "description": "Toont de KNLTB enkel- en dubbelrating direct achter spelersnamen op mijnknltb.toernooi.nl.",
   "permissions": [
-    "activeTab",
     "storage"
   ],
   "host_permissions": [
-    "https://mijnknltb.toernooi.nl/*",
-    "https://*.toernooi.nl/*",
-    "https://*.tournamentsoftware.com/*"
+    "https://mijnknltb.toernooi.nl/*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "https://mijnknltb.toernooi.nl/*",
-        "https://*.toernooi.nl/*",
-        "https://*.tournamentsoftware.com/*"
+        "https://mijnknltb.toernooi.nl/*"
       ],
       "js": [
         "site.js",

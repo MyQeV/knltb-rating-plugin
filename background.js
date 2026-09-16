@@ -9,6 +9,5 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       url: chrome.runtime.getURL("dashboard.html" + (msg.query || "")),
     });
     sendResponse({ ok: true });
-    return true;
   }
 });

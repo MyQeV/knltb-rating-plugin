@@ -3362,24 +3362,16 @@
        aanroepen, en toen één daarvan door een refactor verdween liep het
        opstarten stuk vóór start() — waardoor de hele extensie zweeg zonder
        dat er iets op de pagina te zien was. Eén kapot onderdeel mag de rest
-       niet meeslepen. */
-    const veilig = (naam, fn) => {
-      try {
-        fn();
-      } catch (e) {
-        console.error("[KNLTB] " + naam + " mislukt:", e);
-      }
-    };
+       niet meeslepen — ook niet als het asynchroon is en pas later omvalt. */
+    const veilig = (naam, fn) =>
+      Promise.resolve()
+        .then(fn)
+        .catch((e) => console.error("[KNLTB] " + naam + " mislukt:", e));
 
     veilig("cache opruimen", pruneCache);
     veilig("eigen profiel vastleggen", rememberSelf);
     veilig("ratingverloop", showHistory);
     veilig("dashboardknop", addDashboardButton);
-
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", () => veilig("scannen", start));
-    } else {
-      veilig("scannen", start);
-    }
+    veilig("scannen", start);
   });
 })();
