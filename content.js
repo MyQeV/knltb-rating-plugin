@@ -451,8 +451,6 @@
         if (cached.none) throw new Error("NO_RATING_FOUND");
         return { ...cached, fromCache: true };
       }
-      // wat al bekend is mag getoond worden; alleen ophalen heeft geen zin
-      if (loggedOut) throw new Error("NOT_LOGGED_IN");
 
       const seen = new Set();
       let sawPage = false; // hebben we überhaupt een pagina te zien gekregen?
@@ -475,6 +473,10 @@
           data = { ...hit, fromCache: true, via: hit.via || url };
           break;
         }
+
+        /* Uitgelogd: niets ophalen, maar de overige namen wél nog nakijken —
+           wat al bekend is mag getoond worden, onder welke naam ook. */
+        if (loggedOut) continue;
 
         const trusted = isProfileUrl(url);
         let d = await fetchDoc(url, trusted);
@@ -529,6 +531,8 @@
       }
 
       if (!data) {
+        // uitgelogd en nergens bekend: dan is dát het antwoord, en niets onthouden
+        if (loggedOut) throw new Error("NOT_LOGGED_IN");
         /* Alleen onthouden dat er geen rating is als we de pagina ook
            daadwerkelijk hebben gezien. Een 403 of 404 door een tijdelijke
            storing mag geen 8 uur lang als "deze speler heeft geen rating"

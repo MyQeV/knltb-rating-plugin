@@ -10,6 +10,9 @@
  *   3. Mislukt een schrijfactie (opslag vol), dan wordt er opgeruimd, en dat
  *      leest de hele opslag in. Mislukken er twee tegelijk, dan hoort er één
  *      opruimbeurt te lopen — niet twee.
+ *   4. Uitgelogd wordt er niets opgehaald, maar wat al in de cache staat mag
+ *      gewoon getoond worden — ook als de speler hier onder een andere naam
+ *      staat dan waaronder hij bewaard is.
  */
 const fs = require("fs");
 const path = require("path");
@@ -32,24 +35,33 @@ const ORG = "eeeeeeee-5555-6666-7777-888888888888";
 
 const SPELERS = {
   1: { uuid: "eeeeeeee-0000-0000-0000-000000000001", naam: "Speler A", rating: "6,0000", lid: "10000001" },
-  2: { uuid: "eeeeeeee-0000-0000-0000-000000000002", naam: "Speler B", rating: "7,0000" },
+  2: { uuid: "eeeeeeee-0000-0000-0000-000000000002", naam: "Speler B", rating: "7,0000", lid: "10000002" },
   // geen rating op zijn profiel, en ook geen tabblad ernaartoe
   3: { uuid: "eeeeeeee-0000-0000-0000-000000000003", naam: "Speler C" },
+  4: { uuid: "eeeeeeee-0000-0000-0000-000000000004", naam: "Speler D", rating: "6,5000" },
 };
 
 const profielUrl = (s) => SITE + "/player-profile/" + s.uuid;
+// het bondsnummer-adres: /player/<org>/<base64 van "base64:<bondsnummer>">
+const lidUrl = (s) => SITE + "/player/" + ORG + "/" + Buffer.from("base64:" + s.lid).toString("base64");
 
 const link = (s) =>
   `<li class="list__item"><a href="/player-profile/${s.uuid}" class="nav-link">
      <span class="nav-link__value">${s.naam}</span></a></li>`;
 
-/* Een toernooilink mét H2H-knop ernaast: het bondsnummer daaruit is de
-   snelste route naar het profiel, en de speler krijgt zo drie namen. */
-const ASPX = "/sport/player.aspx?id=" + TOERNOOI + "&player=3868";
-const matchLink = (s) =>
-  `<li class="match"><a href="${ASPX.replace("&", "&amp;")}" class="nav-link">
+/* Een link mét H2H-knop ernaast: het bondsnummer daaruit is de snelste
+   route naar het profiel, en levert de speler een naam extra op. */
+const lidLink = (s, href = "/player-profile/" + s.uuid) =>
+  `<li class="match"><a href="${href}" class="nav-link">
      <span class="nav-link__value">${s.naam}</span></a>
    <a href="/head-2-head?OrganizationCode=${ORG}&amp;T1P1MemberID=${s.lid}">H2H</a></li>`;
+
+// een toernooilink: met de H2H-knop erbij heeft de speler zo drie namen
+const ASPX = "/sport/player.aspx?id=" + TOERNOOI + "&player=3868";
+const matchLink = (s) => lidLink(s, ASPX.replace("&", "&amp;"));
+
+const INLOG = `<html><body><form action="/Login" method="post">
+  <input name="username"><input name="password"></form></body></html>`;
 
 const pagina = (items) =>
   `<!doctype html><html><body><ul class="list">${items.join("")}</ul></body></html>`;
@@ -183,21 +195,20 @@ const spelerVan = (url) => {
   /* ---- 2. drie namen, één schrijfactie ------------------------------------ */
 
   const s = SPELERS[1];
-  const lidUrl = SITE + "/player/" + ORG + "/" + Buffer.from("base64:" + s.lid).toString("base64");
   const b = venster(pagina([matchLink(s)]), { settings: {} }, (url) =>
     // het bondsnummer-adres stuurt door naar het landelijke profiel
-    antwoord(url, profiel(s), url === lidUrl ? profielUrl(s) : url)
+    antwoord(url, profiel(s), url === lidUrl(s) ? profielUrl(s) : url)
   );
   await wacht(500);
 
   ok(b.fouten.length === 0, "geen fouten", b.fouten.join(" | "));
-  ok(b.opgehaald.length === 1 && b.opgehaald[0] === lidUrl,
+  ok(b.opgehaald.length === 1 && b.opgehaald[0] === lidUrl(s),
      "via het bondsnummer uit de H2H-knop opgehaald", b.opgehaald.join(" , "));
   const tag = b.win.document.querySelector(".knltb-tag--single .v");
   ok(tag && tag.textContent === s.rating, "rating achter de naam", tag ? tag.textContent : "geen");
 
   const rec = b.records();
-  const verwacht = ["r:" + lidUrl, "r:" + SITE + ASPX, "r:" + profielUrl(s)].sort();
+  const verwacht = ["r:" + lidUrl(s), "r:" + SITE + ASPX, "r:" + profielUrl(s)].sort();
   const sleutels = rec.length === 1 ? Object.keys(rec[0]).sort() : rec.flatMap(Object.keys);
   ok(rec.length === 1, "één schrijfactie voor deze speler", rec.length + " schrijfacties");
   ok(JSON.stringify(sleutels) === JSON.stringify(verwacht),
@@ -230,6 +241,42 @@ const spelerVan = (url) => {
   const over = Object.keys(opslag).filter((k) => k.startsWith("r:"));
   ok(!(r("a1") in opslag) && !(r("a2") in opslag), "verlopen en beschadigd zijn weg", over.join(" , "));
   ok(r("a3") in opslag && "selfProfile" in opslag, "vers en niet-cache blijven staan", Object.keys(opslag).join(" , "));
+
+  /* ---- 4. uitgelogd: wat al bekend is wordt getoond, onder welke naam ook --
+     Eén tegelijk, in paginavolgorde. A staat eerst met H2H-knop (bewaard
+     onder bondsnummer én profiel), B eerst als gewone link (alleen onder
+     het profiel). Dan D, wiens pagina de inlogpagina is. Daarna A nogmaals
+     als gewone link — zijn sleutel is bekend — en B nogmaals met H2H-knop:
+     zijn sleutel (het bondsnummer) is onbekend, zijn profiel wél. Beiden
+     horen hun rating te krijgen zonder dat er iets opgehaald wordt. */
+
+  const [A, B, D] = [SPELERS[1], SPELERS[2], SPELERS[4]];
+  const e = venster(
+    pagina([lidLink(A), link(B), link(D), link(A), lidLink(B)]),
+    { settings: { concurrency: 1 } },
+    (url) => {
+      if (url === lidUrl(A)) return antwoord(url, profiel(A), profielUrl(A));
+      const sp = spelerVan(url);
+      return antwoord(url, sp === D ? INLOG : profiel(sp));
+    }
+  );
+  await wacht(500);
+
+  const badge = (li) => {
+    const h = li.querySelector(".knltb-tags");
+    if (!h) return "weg";
+    const v = h.querySelector(".knltb-tag--single .v");
+    return v ? v.textContent : h.textContent;
+  };
+  const badges = [...e.win.document.querySelectorAll("li")].map(badge);
+
+  ok(e.fouten.length === 0, "geen fouten", e.fouten.join(" | "));
+  ok(e.opgehaald.length === 3, "drie verzoeken: A, B en de inlogpagina — daarna niets meer",
+     e.opgehaald.map((u) => u.replace(SITE, "")).join(" , "));
+  ok(badges[2] === "login", "D meldt dat je niet ingelogd bent", badges[2]);
+  ok(badges[3] === A.rating, "A nogmaals: zijn sleutel is bekend, rating uit de cache", badges[3]);
+  ok(badges[4] === B.rating, "B nogmaals onder zijn bondsnummer: het profiel is bekend, rating uit de cache", badges[4]);
+  ok(badges[0] === A.rating && badges[1] === B.rating, "en de eerste twee staan er nog", badges.join(" , "));
 
   console.log(fail ? "\n" + fail + " test(s) mislukt" : "\nalle tests geslaagd");
   process.exit(fail ? 1 : 0);
