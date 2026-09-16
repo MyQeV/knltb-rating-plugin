@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "test": "node test/run.js",
-    "pack": "git archive --format=zip -o knltb-rating.zip HEAD manifest.json background.js content.js content.css dss.js parse.js bracket.js history.js popup.html popup.js dashboard.html dashboard.js dashboard.css icons"
+    "pack": "git archive --format=zip -o knltb-rating.zip HEAD -- manifest.json icons \":(glob)*.js\" \":(glob)*.css\" \":(glob)*.html\""
   },
   "devDependencies": {
     "jsdom": "^26.1.0"
