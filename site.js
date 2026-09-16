@@ -145,6 +145,7 @@ const Site = (() => {
   /* chrome.storage.local met promises. `set` faalt hoorbaar als de opslag vol
      zit; de callback-API meldt dat alleen via runtime.lastError. */
   const local = () => chrome.storage.local;
+  let chain = Promise.resolve(); // zie merge
   const store = {
     get: (keys) => new Promise((resolve) => local().get(keys, resolve)),
     set: (obj) =>
@@ -156,6 +157,25 @@ const Site = (() => {
         })
       ),
     remove: (keys) => new Promise((resolve) => local().remove(keys, resolve)),
+    /* Eén sleutel lezen, aanvullen en terugschrijven — achter elkaar in
+       plaats van door elkaar. Twee losse lees-wijzig-schrijf-rondes lazen
+       anders allebei de oude stand, en de tweede schreef de eerste weer weg.
+       De ketting is per pagina: popup, dashboard en content script hebben
+       elk hun eigen, dus die kunnen elkaar nog steeds overschrijven.
+       Geeft het opgeslagen object terug. */
+    merge: (key, patch) => {
+      const work = async () => {
+        const cur = (await store.get(key))[key] || {};
+        const next = { ...cur, ...patch };
+        await store.set({ [key]: next });
+        return next;
+      };
+      const p = chain.then(work);
+      // een volle opslag is de zorg van déze aanroeper; de ketting slikt de
+      // fout, anders kwam geen enkele merge daarna nog aan de beurt
+      chain = p.catch(() => {});
+      return p;
+    },
   };
 
   return {

@@ -82,24 +82,22 @@ Site.store.get("settings").then((obj) => {
 });
 
 function save() {
-  Site.store.get("settings").then((obj) => {
-    const s = { ...Site.DEFAULTS, ...(obj.settings || {}) };
-    for (const f of FIELDS) {
-      const el = document.getElementById(f);
-      if (el.type === "checkbox") {
-        s[f] = el.checked;
-      } else {
-        // een leeggemaakt getalveld gaf Number("") === 0, en concurrency 0
-        // liet de wachtrij voorgoed stilstaan
-        const lo = el.min !== "" ? Number(el.min) : 1;
-        const hi = el.max !== "" ? Number(el.max) : Infinity;
-        const v = Number(el.value);
-        s[f] = !isFinite(v) || v === 0 ? Site.DEFAULTS[f] : Math.min(hi, Math.max(lo, v));
-        el.value = s[f];
-      }
+  const patch = {};
+  for (const f of FIELDS) {
+    const el = document.getElementById(f);
+    if (el.type === "checkbox") {
+      patch[f] = el.checked;
+    } else {
+      // een leeggemaakt getalveld gaf Number("") === 0, en concurrency 0
+      // liet de wachtrij voorgoed stilstaan
+      const lo = el.min !== "" ? Number(el.min) : 1;
+      const hi = el.max !== "" ? Number(el.max) : Infinity;
+      const v = Number(el.value);
+      patch[f] = !isFinite(v) || v === 0 ? Site.DEFAULTS[f] : Math.min(hi, Math.max(lo, v));
+      el.value = patch[f];
     }
-    Site.store.set({ settings: s }).then(() => send({ type: "settings", settings: s }));
-  });
+  }
+  Site.store.merge("settings", patch).then((s) => send({ type: "settings", settings: s }));
 }
 
 for (const f of FIELDS) document.getElementById(f).addEventListener("change", save);

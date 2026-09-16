@@ -2732,16 +2732,7 @@
         const save = (rating, name) => {
           settings.partnerRating = rating;
           settings.partnerName = name;
-          Site.store.get("settings").then((obj) =>
-            Site.store.set({
-              settings: {
-                ...DEFAULTS,
-                ...(obj.settings || {}),
-                partnerRating: rating,
-                partnerName: name,
-              },
-            })
-          );
+          Site.store.merge("settings", { partnerRating: rating, partnerName: name });
           redrawField();
         };
 

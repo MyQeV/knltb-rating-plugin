@@ -665,8 +665,7 @@
         }
         settings.partnerRating = waarde;
         settings.partnerName = r ? r.name : null;
-        const { settings: cur } = await store.get("settings");
-        await store.set({ settings: { ...(cur || {}), partnerRating: settings.partnerRating, partnerName: settings.partnerName } });
+        await store.merge("settings", { partnerRating: settings.partnerRating, partnerName: settings.partnerName });
 
         if (field) {
           field.rows = field.rows.filter((r2) => !r2.virtual);

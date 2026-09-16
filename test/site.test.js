@@ -67,5 +67,56 @@ ok(Site.median([5, 6, 8]) === 6 && Site.median([5, 6, 7, 8]) === 6.5, "mediaan o
 ok(Site.f4(6.43142) === "6,4314" && Site.f4(null) === "—", "f4 rondt op vier decimalen, niets is een streepje");
 ok(Site.signed(0.0123) === "+0,0123" && Site.signed(-0.0123) === "−0,0123" && Site.signed(0) === "±0,0000", "signed met teken");
 
-console.log(fail ? "\n" + fail + " test(s) mislukt" : "\nalle tests geslaagd");
-process.exit(fail ? 1 : 0);
+// ---- 4. store.merge: lezen-wijzigen-schrijven achter elkaar -----------
+console.log("\nstore.merge");
+(async () => {
+  const opslag = { settings: { enabled: true } };
+  let vol = false;
+  global.chrome = {
+    runtime: { lastError: null },
+    storage: {
+      local: {
+        // net als de echte opslag komt `get` pas een tik later terug — zo
+        // lezen twee merges die tegelijk starten allebei de oude stand
+        get(keys, cb) {
+          const out = {};
+          for (const k of [].concat(keys)) if (k in opslag) out[k] = { ...opslag[k] };
+          setTimeout(() => cb(out), 0);
+        },
+        set(o, cb) {
+          if (vol) {
+            vol = false;
+            chrome.runtime.lastError = { message: "QUOTA_BYTES quota exceeded" };
+            cb();
+            chrome.runtime.lastError = null;
+            return;
+          }
+          Object.assign(opslag, o);
+          cb();
+        },
+      },
+    },
+  };
+
+  await Promise.all([Site.store.merge("settings", { showOdds: false }), Site.store.merge("settings", { partnerRating: 6.5 })]);
+  ok(
+    opslag.settings.enabled === true && opslag.settings.showOdds === false && opslag.settings.partnerRating === 6.5,
+    "twee merges tegelijk: beide wijzigingen blijven staan",
+    JSON.stringify(opslag.settings)
+  );
+
+  const terug = await Site.store.merge("settings", { debug: true });
+  ok(terug.debug === true && JSON.stringify(terug) === JSON.stringify(opslag.settings), "merge geeft het opgeslagen object terug", JSON.stringify(terug));
+
+  const nieuw = await Site.store.merge("nogNiet", { a: 1 });
+  ok(JSON.stringify(nieuw) === '{"a":1}' && JSON.stringify(opslag.nogNiet) === '{"a":1}', "merge op een lege sleutel begint bij {}", JSON.stringify(opslag.nogNiet));
+
+  vol = true;
+  const melding = await Site.store.merge("settings", { showDelta: false }).then(() => null, (e) => e.message);
+  ok(melding === "QUOTA_BYTES quota exceeded", "een volle opslag laat die ene merge falen", String(melding));
+  await Site.store.merge("settings", { showDelta: false });
+  ok(opslag.settings.showDelta === false, "…maar de merge daarna komt gewoon aan de beurt", JSON.stringify(opslag.settings));
+
+  console.log(fail ? "\n" + fail + " test(s) mislukt" : "\nalle tests geslaagd");
+  process.exit(fail ? 1 : 0);
+})();
