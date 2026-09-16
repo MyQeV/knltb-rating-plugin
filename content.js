@@ -1142,10 +1142,16 @@
    * al op de pagina bij de wedstrijd zelf. Dat laatste is het geval op het
    * Rating-tabblad, en daar hoeft dus niets opgehaald te worden voordat de
    * mutaties berekend kunnen worden.
+   *
+   * Maar alleen als de link naar een speler wijst. De H2H-knop en een
+   * clublink staan in hetzelfde naamblok, en ratingAtMatch leest daar voor
+   * hen dezelfde rating af — dan telt zo'n knop als derde speler mee.
    */
   function sidePlayers(row) {
-    return [...row.querySelectorAll("a")].filter(
-      (a) => ratingOf.has(a) || ratingAtMatch(a) != null
+    return [...row.querySelectorAll("a[href]")].filter(
+      (a) =>
+        /player/i.test(a.getAttribute("href") || "") &&
+        (ratingOf.has(a) || ratingAtMatch(a) != null)
     );
   }
 
@@ -1300,11 +1306,10 @@
   }
 
   /** Rondevolgorde: eerst het schema, dan de kop bij de wedstrijd. */
-  function roundRank(block) {
+  function roundRank(block, br = bracketRound(block)) {
     /* In een schema is de kolompositie de waarheid: kolom 0 komt vóór
        kolom 1, ongeacht hoe de ronde heet. Namen alleen als schaal
        gebruiken zou scheef gaan zodra één kop niet herkend wordt. */
-    const br = bracketRound(block);
     if (br) return 200 + br.index * 4;
 
     const head = block.querySelector(".match__header");
@@ -1673,16 +1678,17 @@
       if (teams.flat().some((p) => p.start == null || !isFinite(p.start))) return;
 
       const when = matchWhen(block);
+      const br = bracketRound(block);
 
       out.push({
         block, rows, teams, isDouble, order,
         group: groupOf(block),
         when: when ? when.at : null,
         exact: when ? when.exact : false,
-        round: roundRank(block),
+        round: roundRank(block, br),
         wo: isWalkover(block),
         // in een schema loopt de ronde mee met de tijd, in een poule niet
-        isBracket: !!bracketRound(block),
+        isBracket: !!br,
         wonBy: winners && winners.has(block)
           ? winners.get(block)
           : rows.some((r) => r.classList.contains("has-won"))
@@ -1816,6 +1822,11 @@
     const stand = new Map();
     const totals = new Map();
 
+    // van wie de pagina is: één keer opzoeken, en pas als een wedstrijd een
+    // officiële mutatie heeft om onze som naast te leggen
+    let subj;
+    const pageSubject = () => (subj ??= subjectOfPage());
+
     const current = (p, disc) => {
       // staat de rating van dat moment al op de pagina? dan is doorrekenen
       // niet alleen overbodig maar fout — je zou de mutatie dubbel tellen
@@ -1828,7 +1839,7 @@
     for (const m of matches) {
       const disc = m.isDouble ? "D" : "S";
       const official = officialDelta(m.block);
-      const subject = official != null ? subjectOfPage() : null;
+      const subject = official != null ? pageSubject() : null;
 
       /* Walkover: er is niet gespeeld, dus er valt niets te berekenen.
          Altijd overslaan — ook in de doorrekening en het paneel. Staat er

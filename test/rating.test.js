@@ -14,6 +14,11 @@
  *
  * Verder hoort hier géén badge achter de naam en géén "voor → na": dat staat
  * er van de site al. De winstkans wél.
+ *
+ * En alleen een link naar een speler telt als speler. De H2H-knop en een
+ * clublink staan in hetzelfde naamblok als de rating van dat moment; wie
+ * elke <a> in de rij meeneemt leest voor allebei die rating af en maakt van
+ * een enkel een kant met drie spelers.
  */
 const fs = require("fs");
 const path = require("path");
@@ -38,30 +43,37 @@ const MIJ = "13e57c28-14f9-424e-83c4-c7e96c9546a7";
    De KNLTB toont -0,0483; dat scheelt een halve honderdduizendste door
    afronding, dus het vinkje mag daar "niet gelijk" van maken — waar het hier
    om gaat is dát er een vinkje staat. */
-const speler = (nr, naam, rating, gewonnen) =>
+const speler = (nr, naam, rating, gewonnen, extra = "") =>
   `<div class="match__row${gewonnen ? " has-won" : ""}"><div class="match__row-title">
      <div class="match__row-title-value">
        <span class="match__row-title-value-content">
          <a href="/sport/player.aspx?id=DDDDDDDD-1111-2222-3333-444444444444&amp;player=${nr}"
-            class="nav-link"><span class="nav-link__value">${naam}</span></a>
+            class="nav-link"><span class="nav-link__value">${naam}</span></a>${extra}
        </span>
        <span class="match__row-title-aside">(${rating})</span>
      </div>
    </div></div>`;
 
-const wedstrijd = (id, kop) => `
+const wedstrijd = (id, kop, extra) => `
 <div class="match" id="${id}">
   <div class="match__header">
     <ul class="match__header-title"><li>Voorbeeld Open Tennis HE C (8.0546 - 9.2975) Finale</li></ul>
     <div class="match__header-aside">${kop}</div>
   </div>
   <div class="match__body"><div class="match__row-wrapper">
-    ${speler(1359, "Mike Verhaar", "8,2719", false)}
+    ${speler(1359, "Mike Verhaar", "8,2719", false, extra)}
     ${speler(1880, "Stijn van Es", "9,1191", true)}
   </div>
   <div class="match__result"><ul class="points"><li>2</li></ul></div>
   </div>
 </div>`;
+
+/* Naast de spelerslink de H2H-knop en een clublink, in hetzelfde naamblok
+   als de rating van dat moment. Geen van beide wijst naar een speler. */
+const KNOPPEN =
+  ' <a class="match__btn-h2h" href="/head-2-head?OrganizationCode=630BAE5F-36FE-42EA-A2E5-999630ABFEB8' +
+  '&amp;T1P1MemberID=30340969&amp;T2P1MemberID=12345678">H2H</a>' +
+  ' <a href="/club/l-t-c-smash">L.T.C. Smash</a>';
 
 const PAGINA = `<!doctype html><html><body>
 <div class="masthead"><div class="dropdown-menu"><ul class="dropdown-list">
@@ -91,6 +103,8 @@ const PAGINA = `<!doctype html><html><body>
     '<span class="tag tag--placeholder"> <time datetime="PT47M">47m</time> </span>' +
       ' <span class="tag tag--danger"> <span>0,0483</span> </span>'
   )}</li>
+  <!-- vorm 5: als m1, maar met de H2H-knop en een clublink naast de naam -->
+  <li>${wedstrijd("m5", '<span class="tag"><span>0,0483</span></span>', KNOPPEN)}</li>
 </ul>
 </body></html>`;
 
@@ -175,6 +189,32 @@ const wacht = (ms) => new Promise((r) => setTimeout(r, ms));
   ok(tel(".knltb-delta") === 0,
      "geen mutatiechip per rij: dat getal staat al in de controle bovenaan",
      tel(".knltb-delta") + "");
+
+  // ---- alleen een spelerslink telt als speler ------------------------
+  ok(tel("#m5 .knltb-check") === 1,
+     "vinkje ook met de H2H-knop en een clublink naast de naam",
+     tel("#m5 .knltb-check") + "");
+  ok(tel("#m5 .knltb-odds") === 2,
+     "één winstkans per kant: de knoppen zijn geen extra speler",
+     tel("#m5 .knltb-odds") + "");
+  const kansen = (id) =>
+    [...win.document.querySelectorAll("#" + id + " .knltb-odds")].map((e) => e.textContent).join(" ");
+  ok(kansen("m5") === kansen("m1"),
+     "en dezelfde winstkansen als zonder die knoppen: een enkel van twee spelers",
+     kansen("m5") + " tegenover " + kansen("m1"));
+
+  // wat de doorrekening per wedstrijd aan spelers ziet
+  let diag = null;
+  win.__onMsg({ type: "diagnose" }, {}, (r) => (diag = r));
+  await wacht(1500);
+  const teams = diag && Array.isArray(diag.matches)
+    ? diag.matches.map((m) => m.teams.map((t) => t.map((p) => p.naam).join(" + ")).join(" tegen "))
+    : null;
+  ok(teams && teams.length === 5,
+     "alle vijf wedstrijden worden doorgerekend", teams ? teams.length + "" : "geen diagnose");
+  ok(teams && teams.every((t) => t === "Mike Verhaar tegen Stijn van Es"),
+     "elk met precies de twee spelers: H2H en L.T.C. Smash zijn geen naam",
+     teams ? teams.join(" | ") : "");
 
   ok(fouten.length === 0, "geen fouten aan het eind", fouten.join(" | "));
   console.log(fail ? "\n" + fail + " test(s) mislukt" : "\nalle tests geslaagd");
