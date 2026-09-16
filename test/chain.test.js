@@ -330,6 +330,41 @@ const wacht = (ms) => new Promise((r) => setTimeout(r, ms));
   await wacht(1200);
   ok(win.document.querySelectorAll(".knltb-odds").length > 0, "en komt terug");
 
+  // ---- vreemde mutaties --------------------------------------------
+  // De site prikt zelf ook van alles in de pagina: een tooltip, een lazy
+  // geladen slide. Zolang daar geen nieuwe wedstrijd bij zit mag dat niets
+  // hertekenen — de chip die er stond moet hetzelfde element blijven, niet
+  // een vers exemplaar met dezelfde tekst.
+  const groep = win.document.querySelector(".bracket-round__match-group");
+  const chipVoor = win.document.querySelector("#m1 .knltb-delta");
+  const chipsVoor = win.document.querySelectorAll(".knltb-delta").length;
+  const tagsVoor = win.document.querySelectorAll(".knltb-tags").length;
+  groep.insertAdjacentHTML("beforeend", "<div><span>tooltip</span></div>");
+  await wacht(1200);
+  ok(
+    win.document.contains(chipVoor) &&
+      win.document.querySelector("#m1 .knltb-delta") === chipVoor,
+    "vreemde mutatie tekent de chips niet opnieuw"
+  );
+  ok(win.document.querySelectorAll(".knltb-delta").length === chipsVoor,
+     "en het aantal chips blijft gelijk",
+     chipsVoor + " -> " + win.document.querySelectorAll(".knltb-delta").length);
+  ok(win.document.querySelectorAll(".knltb-tags").length === tagsVoor,
+     "net als het aantal badges",
+     tagsVoor + " -> " + win.document.querySelectorAll(".knltb-tags").length);
+
+  // een échte nieuwe wedstrijd moet wél doorgerekend worden
+  win.document.querySelector(".bracket").insertAdjacentHTML(
+    "afterend",
+    `<div class="match" id="m4"><div class="match__body"><div class="match__row-wrapper">
+       ${rij(12, true)}${rij(14, false)}
+     </div></div><div class="match__result"><ul class="points"><li>6</li></ul></div></div>`
+  );
+  await wacht(1500);
+  ok(win.document.querySelectorAll("#m4 .knltb-delta").length === 2,
+     "nieuwe wedstrijd wordt wél doorgerekend",
+     win.document.querySelectorAll("#m4 .knltb-delta").length + " chips");
+
   ok(fouten.length === 0, "geen fouten aan het eind", fouten.join(" | "));
   console.log(fail ? "\n" + fail + " test(s) mislukt" : "\nalle tests geslaagd");
   process.exit(fail ? 1 : 0);

@@ -143,7 +143,7 @@
   }
 
   const PLAYER_ANCHOR_SEL =
-    'a[href*="player.aspx"], a[href*="/player-profile/"], a[href*="/player/"]';
+    'a[href*="player.aspx" i], a[href*="player-profile" i], a[href*="/player/" i]';
 
   /**
    * Koppelt spelerslinks aan bondsnummers via de H2H-knop in hetzelfde
@@ -230,10 +230,9 @@
 
   function isPlayerLink(a) {
     if (!a.href || a.dataset.knltbDone) return false;
-    if (a.closest(".knltb-tags, .knltb-delta, .knltb-proj")) return false;
-    if (entryAnchors.has(a)) return false; // rating staat al in de tabel
-    if (a.closest(SKIP_CONTAINERS)) return false;
 
+    // eerst de goedkope toets op de href zelf; de closest()-tochten
+    // hieronder zijn per anker het duurste stuk van een scan
     let u;
     try {
       u = new URL(a.href, location.href);
@@ -244,6 +243,10 @@
     if (u.pathname === location.pathname) return false; // link naar zichzelf
 
     if (!playerIdFromHref(u)) return false;
+
+    if (a.closest(".knltb-tags, .knltb-delta, .knltb-proj")) return false;
+    if (entryAnchors.has(a)) return false; // rating staat al in de tabel
+    if (a.closest(SKIP_CONTAINERS)) return false;
 
     const txt = norm(a.textContent);
     if (!looksLikeName(txt)) return false;
@@ -864,14 +867,6 @@
         { rootMargin: "300px" } // net iets voordat je er bent
       );
     }
-    // ankers die van de pagina verdwijnen voordat ze in beeld komen
-    // blijven anders door de observer vastgehouden
-    for (const el of observed) {
-      if (!document.contains(el)) {
-        observer.unobserve(el);
-        observed.delete(el);
-      }
-    }
 
     waiting.set(item.a, item);
     observed.add(item.a);
@@ -926,13 +921,23 @@
        ruim honderd namen vielen de laatste tientallen daardoor stil weg —
        zonder badge, zonder mutatie, zonder melding. De limiet verhuist
        hieronder naar het ophalen zelf; hier nemen we iedereen mee. */
-    const slice = [...document.querySelectorAll("a[href]")].filter(isPlayerLink);
+    // elke spelerslink heeft "player" in het pad (zie PLAYER_PATH_RES), dus
+    // de rest van de ankers hoeft isPlayerLink niet eens te zien
+    const slice = [...document.querySelectorAll('a[href*="player" i]')].filter(isPlayerLink);
 
     /* Niets op te halen betekent niet: niets te doen. Op een inschrijvings-
        pagina staan de ratings al in de tabel, dus worden al die ankers
-       overgeslagen — maar het veldpaneel moet er wél komen. */
+       overgeslagen — maar het veldpaneel moet er wél komen. Maar niet bij
+       élke vreemde mutatie: een tooltip van de site of een lazy geladen
+       slide zonder nieuwe wedstrijden mag niet alle chips, badges en het
+       paneel opnieuw laten opbouwen. Alleen als er nog een wedstrijd
+       zonder doorrekening staat, of het paneel er hoort te zijn maar mist. */
     if (!slice.length) {
-      scheduleDeltas();
+      const nieuw = document.querySelector(".match:not([data-knltb-delta])");
+      const paneelMist =
+        entryTable && settings.showMeInField && settings.showSummary &&
+        !summaryClosed && !document.getElementById("knltb-summary");
+      if (nieuw || paneelMist) scheduleDeltas();
       return 0;
     }
 
@@ -1017,6 +1022,16 @@
       const ruimte = soort.ophalen ? Math.max(0, settings.maxLinksPerPage || 0) : 0;
       const halen = misses.slice(0, ruimte);
       const rest = misses.slice(ruimte);
+
+      // ankers die van de pagina verdwenen voordat ze in beeld kwamen
+      // blijven anders door de observer vastgehouden; één keer per scan
+      // opruimen, niet per anker
+      for (const el of observed) {
+        if (!document.contains(el)) {
+          observer.unobserve(el);
+          observed.delete(el);
+        }
+      }
 
       for (const item of halen) scheduleItem(item);
 
@@ -1519,6 +1534,10 @@
     });
     root.querySelectorAll(".knltb-proj-inhoud").forEach((el) => el.remove());
     root.querySelectorAll(".knltb-leeg").forEach((el) => el.classList.remove("knltb-leeg"));
+    // de teruggezette innerHTML kan elementen van de site bevatten; die mag
+    // de observer niet als vreemde wijziging zien, anders trapt de extensie
+    // zichzelf opnieuw af
+    if (observerRoot) observerRoot.takeRecords();
   }
 
   function showProjected(filled) {
@@ -1754,6 +1773,8 @@
     document.querySelectorAll("[data-knltb-proj]").forEach((el) => delete el.dataset.knltbProj);
     document.getElementById("knltb-summary")?.remove();
     annotateMatches();
+    // alles hierboven is eigen werk; de observer hoeft het niet te zien
+    if (observerRoot) observerRoot.takeRecords();
   }
 
   function annotateMatches() {
