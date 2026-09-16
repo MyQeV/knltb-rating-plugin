@@ -353,6 +353,48 @@ const wacht = (ms) => new Promise((r) => setTimeout(r, ms));
      "net als het aantal badges",
      tagsVoor + " -> " + win.document.querySelectorAll(".knltb-tags").length);
 
+  // Het hek zelf: een blok dat de scan nog niet gezien heeft moet na een
+  // vreemde mutatie wél doorgerekend worden — ook zonder nieuwe spelers-
+  // links, want dan is het hek de enige weg naar rerunDeltas. De stempel
+  // data-knltb-delta is de boekhouding van rerunDeltas zelf en gaat daar
+  // toch weg; alleen de gezien-stempel telt.
+  const m2 = win.document.getElementById("m2");
+  delete m2.dataset.knltbGezien;
+  m2.querySelectorAll(".knltb-delta").forEach((el) => el.remove());
+  groep.insertAdjacentHTML("beforeend", "<div><span>tooltip</span></div>");
+  await wacht(1200);
+  ok(win.document.querySelectorAll("#m2 .knltb-delta").length === 2,
+     "blok zonder gezien-stempel wordt na een vreemde mutatie wél doorgerekend",
+     win.document.querySelectorAll("#m2 .knltb-delta").length + " chips");
+
+  // Het lek: een lege plek verderop in het schema (de tegenstander is nog
+  // niet bekend) slaat collectMatches over, dus die krijgt nooit een
+  // doorrekening. Dat mag niet betekenen dat elke vreemde mutatie daarna
+  // opnieuw alles laat tekenen.
+  win.document.querySelector("swiper-container").insertAdjacentHTML(
+    "beforeend",
+    `<swiper-slide class="bracket-round__item" aria-label="3 / 3">
+       <div class="bracket-round__match-group">
+         <div class="match" id="m5"><div class="match__body"><div class="match__row-wrapper">
+           <div class="match__row"><div class="match__row-title"></div></div>
+           <div class="match__row"><div class="match__row-title"></div></div>
+         </div></div></div>
+       </div>
+     </swiper-slide>`
+  );
+  await wacht(1200);
+  ok(win.document.querySelectorAll("#m5 .knltb-delta").length === 0,
+     "lege plek verderop krijgt geen doorrekening",
+     win.document.querySelectorAll("#m5 .knltb-delta").length + " chips");
+  const chipLek = win.document.querySelector("#m1 .knltb-delta");
+  groep.insertAdjacentHTML("beforeend", "<div><span>tooltip</span></div>");
+  await wacht(1200);
+  ok(
+    win.document.contains(chipLek) &&
+      win.document.querySelector("#m1 .knltb-delta") === chipLek,
+    "ook met zo'n lege plek tekent een vreemde mutatie niets opnieuw"
+  );
+
   // een échte nieuwe wedstrijd moet wél doorgerekend worden
   win.document.querySelector(".bracket").insertAdjacentHTML(
     "afterend",

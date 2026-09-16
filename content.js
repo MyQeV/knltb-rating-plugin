@@ -930,10 +930,12 @@
        overgeslagen — maar het veldpaneel moet er wél komen. Maar niet bij
        élke vreemde mutatie: een tooltip van de site of een lazy geladen
        slide zonder nieuwe wedstrijden mag niet alle chips, badges en het
-       paneel opnieuw laten opbouwen. Alleen als er nog een wedstrijd
-       zonder doorrekening staat, of het paneel er hoort te zijn maar mist. */
+       paneel opnieuw laten opbouwen. Alleen als er een wedstrijdblok staat
+       dat rerunDeltas nog niet gezien heeft (data-knltb-delta is daar niet
+       genoeg voor: een bye, een lege plek of een speler zonder rating
+       krijgt die nooit), of als het paneel er hoort te zijn maar mist. */
     if (!slice.length) {
-      const nieuw = document.querySelector(".match:not([data-knltb-delta])");
+      const nieuw = document.querySelector(".match:not([data-knltb-gezien])");
       const paneelMist =
         entryTable && settings.showMeInField && settings.showSummary &&
         !summaryClosed && !document.getElementById("knltb-summary");
@@ -1770,9 +1772,16 @@
       .forEach((el) => el.remove());
     clearProjected();
     document.querySelectorAll("[data-knltb-delta]").forEach((el) => delete el.dataset.knltbDelta);
+    document.querySelectorAll("[data-knltb-gezien]").forEach((el) => delete el.dataset.knltbGezien);
     document.querySelectorAll("[data-knltb-proj]").forEach((el) => delete el.dataset.knltbProj);
     document.getElementById("knltb-summary")?.remove();
     annotateMatches();
+    // elk blok is nu bekeken, ook wat collectMatches oversloeg; een vreemde
+    // mutatie hoeft daar niet voor terug te komen. Alles wat een overgeslagen
+    // blok alsnog bruikbaar kan maken (nieuwe namen, een binnengekomen
+    // rating, een keuze, een instelling) loopt via deze functie en wist de
+    // stempel hierboven weer.
+    document.querySelectorAll(".match").forEach((el) => (el.dataset.knltbGezien = "1"));
     // alles hierboven is eigen werk; de observer hoeft het niet te zien
     if (observerRoot) observerRoot.takeRecords();
   }
@@ -3284,6 +3293,7 @@
     clearProjected();
     document.getElementById("knltb-summary")?.remove();
     document.querySelectorAll("[data-knltb-delta]").forEach((el) => delete el.dataset.knltbDelta);
+    document.querySelectorAll("[data-knltb-gezien]").forEach((el) => delete el.dataset.knltbGezien);
     document.querySelectorAll("[data-knltb-proj]").forEach((el) => delete el.dataset.knltbProj);
     document.querySelectorAll(".knltb-hypothetisch").forEach((el) =>
       el.classList.remove("knltb-hypothetisch")
