@@ -239,17 +239,19 @@ const spelerVan = (url) => {
      is 30 s en kent geen instelling (backoffMs staat vast in content.js),
      dus de herkansing zelf valt buiten de test. Zonder de pauze zou de
      herkansing na één seconde komen en zouden de andere twee meteen gaan;
-     na anderhalve seconde is het verschil dus te zien. */
+     na twee seconden is het verschil dus te zien. Een afgeboekte speler
+     moet daarbij zichtbaar blijven, anders valt er niets te tellen: met
+     hideWhenNoRating verdwijnt zijn badge gewoon. */
 
   let geweigerd = 0;
-  const d = venster([1, 2, 3], { concurrency: 1 }, (url) =>
+  const d = venster([1, 2, 3], { concurrency: 1, hideWhenNoRating: false }, (url) =>
     geweigerd++ === 0 ? afgewezen(url, 429) : antwoord(url, profiel(spelerVan(url)))
   );
-  await wacht(1500);
+  await wacht(2000);
 
   ok(d.fouten.length === 0, "geen fouten", d.fouten.join(" | "));
   ok(d.opgehaald.length === 1,
-     "na een 429 gaat er anderhalve seconde lang niets meer de deur uit",
+     "na een 429 gaat er twee seconden lang niets meer de deur uit",
      d.opgehaald.length + " verzoeken");
   ok(d.tel(".knltb-tags.error") === 0 && d.tel(".knltb-tag") === 0,
      "niemand is als 'geen rating' afgeboekt",

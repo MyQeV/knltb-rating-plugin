@@ -97,14 +97,15 @@
 
     const via = doc.__url || url;
     const rec = { ...data, via };
-    const bewaard = { ...rec, ts: Date.now() };
-    await store.set({ [key]: bewaard, [cacheKey(via)]: bewaard });
+    const saved = { ...rec, ts: Date.now() };
+    await store.set({ [key]: saved, [cacheKey(via)]: saved });
     return rec;
   }
 
   // de foutcodes van Site.parsePlayerInput, in woorden
   const INVOER_FOUT = {
     BUITEN_BEREIK: "Een rating ligt tussen 1 en 10",
+    GEEN_ORG: "Geen organisatiecode bekend — plak een profiellink",
     ANDERE_SITE: "Alleen links van mijnknltb.toernooi.nl",
     ONBEGREPEN: "Niet herkend als rating, link of bondsnummer",
   };

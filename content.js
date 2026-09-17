@@ -353,6 +353,9 @@
   }
 
   async function fetchDoc(url, early = true) {
+    // al uitgelogd gebleken: geen token afboeken en wachten voor niets
+    if (loggedOut) throw new Error("NOT_LOGGED_IN");
+
     /* De rem telt hier, per verzoek — niet per taak in de wachtrij. Eén taak
        doet er tot zes: drie kandidaten, een volledige herhaling, twee stappen
        doorlopen. Na het wachten opnieuw vragen: de bucket is dan met precies
@@ -1254,7 +1257,7 @@
   }
 
   /** Rondevolgorde: eerst het schema, dan de kop bij de wedstrijd. */
-  function roundRank(block, br = bracketRound(block)) {
+  function roundRank(block, br) {
     /* In een schema is de kolompositie de waarheid: kolom 0 komt vóór
        kolom 1, ongeacht hoe de ronde heet. Namen alleen als schaal
        gebruiken zou scheef gaan zodra één kop niet herkend wordt. */
@@ -2310,6 +2313,8 @@
     return /^\/tournament\/[0-9a-f-]{36}\/draw\/\d+/i.test(location.pathname);
   }
 
+  let ownData = null;
+
   /**
    * Per speler: de stand na de gespeelde rondes, plus wat er nog te winnen
    * of te verliezen valt in de resterende wedstrijden.
@@ -2321,8 +2326,6 @@
    * spelen levert je op de lange duur niets op of kost je niets, tenzij je
    * beter of slechter presteert dan je rating voorspelt.
    */
-  let ownData = null;
-
   /** Eén speler doorgerekend over zijn resterende wedstrijden: nu, beste en slechtste geval. */
   function scenario(row, pending, current) {
     const disc = row.disc;
@@ -2529,7 +2532,9 @@
     const url = ownProfileUrl();
     if (!url) return;
     Site.store.get("selfProfile").then((o) => {
-      if (o.selfProfile !== url) Site.store.set({ selfProfile: url });
+      if (o.selfProfile !== url) {
+        Site.store.set({ selfProfile: url }).catch((e) => log("eigen profiel bewaren mislukt:", e.message));
+      }
     });
   }
 
@@ -2622,7 +2627,9 @@
     const save = (rating, name) => {
       settings.partnerRating = rating;
       settings.partnerName = name;
-      Site.store.merge("settings", { partnerRating: rating, partnerName: name });
+      Site.store
+        .merge("settings", { partnerRating: rating, partnerName: name })
+        .catch((e) => log("partner bewaren mislukt:", e.message));
       redrawField();
     };
 

@@ -185,7 +185,14 @@ win2.IntersectionObserver = win.IntersectionObserver;
 win2.fetch = win.fetch;
 const fouten2 = [];
 win2.console.error = (...a) => fouten2.push(a.join(" "));
-win2.eval(code);
+let crash2 = null;
+try {
+  win2.eval(code);
+} catch (e) {
+  crash2 = e;
+}
+
+ok(!crash2, "tweede venster laadt zonder uitzondering", crash2 ? String(crash2) : "");
 
 // de instellingen komen uit chrome.storage, dus alles op de pagina verschijnt
 // pas ná het laden; de chips bovendien na een debounce

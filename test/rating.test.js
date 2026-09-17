@@ -203,10 +203,9 @@ const wacht = (ms) => new Promise((r) => setTimeout(r, ms));
      "en dezelfde winstkansen als zonder die knoppen: een enkel van twee spelers",
      kansen("m5") + " tegenover " + kansen("m1"));
 
-  // wat de doorrekening per wedstrijd aan spelers ziet
-  let diag = null;
-  win.__onMsg({ type: "diagnose" }, {}, (r) => (diag = r));
-  await wacht(1500);
+  // wat de doorrekening per wedstrijd aan spelers ziet; het antwoord komt
+  // via sendResponse, dus daarop wachten in plaats van een vaste pauze
+  const diag = await new Promise((r) => win.__onMsg({ type: "diagnose" }, {}, r));
   const teams = diag && Array.isArray(diag.matches)
     ? diag.matches.map((m) => m.teams.map((t) => t.map((p) => p.naam).join(" + ")).join(" tegen "))
     : null;

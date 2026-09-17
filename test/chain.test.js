@@ -315,7 +315,7 @@ const wacht = (ms) => new Promise((r) => setTimeout(r, ms));
   const rustVoor = observerCalls;
   await wacht(2000);
   const erbij = observerCalls - rustVoor;
-  ok(erbij <= 2, "geen hertekenlus: observer komt tot rust",
+  ok(erbij === 0, "geen hertekenlus: observer komt helemaal tot rust",
      erbij + " oproepen in 2 seconden");
 
   // ---- instelling uitzetten werkt meteen ---------------------------

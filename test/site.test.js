@@ -29,9 +29,8 @@ p = Site.parsePlayerInput(UUID.toUpperCase(), ORG);
 ok(p && p.url === SITE + "/player-profile/" + UUID && p.rating === undefined, "uuid wordt een profiellink in kleine letters", JSON.stringify(p));
 
 p = Site.parsePlayerInput("12345678", ORG);
-const token = p && p.url.split("/").pop();
 ok(
-  p && p.url === SITE + "/player/" + ORG + "/" + token && Buffer.from(token, "base64").toString() === "base64:12345678",
+  p && p.url === SITE + "/player/" + ORG + "/YmFzZTY0OjEyMzQ1Njc4", // btoa("base64:12345678")
   "bondsnummer wordt /player/<org>/<base64 van base64:nummer>",
   JSON.stringify(p)
 );
@@ -59,13 +58,18 @@ ok(!Site.sameName("Fleur Jansen", "Pieter Bakker"), "andere naam is anders");
 ok(Site.sameName("", "Fleur Jansen") && Site.sameName(null, "Fleur Jansen"), "niets te vergelijken: geen bezwaar");
 
 // ---- 3. de kleine helpers ---------------------------------------------
-console.log("\nisProfileUrl, median, f4, signed");
+console.log("\nisProfileUrl, median, f4, signed, looksLoggedOut");
 ok(Site.isProfileUrl(SITE + "/player-profile/" + UUID + "/tournaments"), "profielpagina (ook een tabblad) is betrouwbaar");
 ok(Site.isProfileUrl("/player/" + UUID + "/YmFzZTY0OjEyMzQ1Njc4"), "bondsnummerpagina is betrouwbaar");
 ok(!Site.isProfileUrl("/tournament/" + UUID + "/player/12"), "toernooispeler is geen profiel");
 ok(Site.median([5, 6, 8]) === 6 && Site.median([5, 6, 7, 8]) === 6.5, "mediaan oneven en even");
 ok(Site.f4(6.43142) === "6,4314" && Site.f4(null) === "—", "f4 rondt op vier decimalen, niets is een streepje");
 ok(Site.signed(0.0123) === "+0,0123" && Site.signed(-0.0123) === "−0,0123" && Site.signed(0) === "±0,0000", "signed met teken");
+ok(
+  Site.looksLoggedOut('<form action="/Login"><input name="password"></form>') &&
+    !Site.looksLoggedOut('<a href="/login">Inloggen</a><div class="page-head"></div>'),
+  "looksLoggedOut: het wachtwoordveld telt, een /login-link in het menu niet"
+);
 
 // ---- 4. store.merge: lezen-wijzigen-schrijven achter elkaar -----------
 console.log("\nstore.merge");
@@ -91,7 +95,9 @@ console.log("\nstore.merge");
             chrome.runtime.lastError = null;
             return;
           }
-          Object.assign(opslag, o);
+          // een kopie, zoals de echte opslag: wat merge teruggeeft mag niet
+          // hetzelfde object zijn als wat hier staat
+          for (const k in o) opslag[k] = { ...o[k] };
           cb();
         },
       },
@@ -119,4 +125,7 @@ console.log("\nstore.merge");
 
   console.log(fail ? "\n" + fail + " test(s) mislukt" : "\nalle tests geslaagd");
   process.exit(fail ? 1 : 0);
-})();
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

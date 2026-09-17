@@ -138,9 +138,11 @@ const Site = (() => {
     return vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
   }
 
-  /* Uitgelogd geeft de site geen 401 maar gewoon de loginpagina, status 200. */
+  /* Uitgelogd geeft de site geen 401 maar gewoon de loginpagina, status 200.
+     Alleen het wachtwoordveld telt: een /login-link in het menu staat ook op
+     een vroeg afgebroken lezing zonder rating, en één misser stopt alles. */
   const looksLoggedOut = (html) =>
-    /name=["']?password|\/login/i.test(html) && !/rating|speelsterkte/i.test(html);
+    /name=["']?password/i.test(html) && !/rating|speelsterkte/i.test(html);
 
   /* chrome.storage.local met promises. `set` faalt hoorbaar als de opslag vol
      zit; de callback-API meldt dat alleen via runtime.lastError. */

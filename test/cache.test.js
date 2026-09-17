@@ -300,6 +300,7 @@ const spelerVan = (url) => {
   ok(badges[3] === A.rating, "A nogmaals: zijn sleutel is bekend, rating uit de cache", badges[3]);
   ok(badges[4] === B.rating, "B nogmaals onder zijn bondsnummer: het profiel is bekend, rating uit de cache", badges[4]);
   ok(badges[0] === A.rating && badges[1] === B.rating, "en de eerste twee staan er nog", badges.join(" , "));
+  ok(onafgevangen === 0, "ook hier bereikt geen afwijzing het proces onafgevangen", onafgevangen + " onafgevangen");
 
   console.log(fail ? "\n" + fail + " test(s) mislukt" : "\nalle tests geslaagd");
   process.exit(fail ? 1 : 0);
