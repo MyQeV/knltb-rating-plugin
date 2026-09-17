@@ -846,6 +846,47 @@
 
   let laatsteScan = null;
 
+  /** Eén spelerslink markeren, registreren en van een placeholder voorzien. */
+  function placeHolder(a) {
+    a.dataset.knltbDone = "1";
+    const u = new URL(a.href, location.href);
+    const urls = candidateUrls(a, u);
+    const entry = {
+      text: norm(a.textContent),
+      href: a.getAttribute("href"),
+      tried: urls,
+      outcome: "pending",
+    };
+    registry.push(entry);
+    if (registry.length > 400) registry.splice(0, registry.length - 400);
+
+    // De badge komt IN de anchor te staan, dus a.textContent raakt daarna
+    // vervuild ("Mike VerhaarS:7,8265"). Nu vastleggen, niet later lezen.
+    if (!a.dataset.knltbName) {
+      a.dataset.knltbName = entry.text.replace(/\[[^\]]*\]/g, "").trim();
+    }
+
+    const holder = makeHolder();
+    // liefst binnen de naam-span, dan blijft de lay-out netjes
+    const nameSpan = a.querySelector(".nav-link__value") || a.querySelector("span");
+    if (nameSpan) nameSpan.appendChild(holder);
+    else a.insertAdjacentElement("afterend", holder);
+
+    return { a, u, urls, holder, entry, keys: [cacheKey(u.href), ...urls.map(cacheKey)] };
+  }
+
+  /** Een verse cachetreffer meteen tekenen — of als "geen rating" afhandelen. */
+  function applyCached(item, hit) {
+    if (hit.none) {
+      applyMiss(item, "NO_RATING_FOUND");
+      return;
+    }
+    const kept = renderTags(item.holder, { ...hit, fromCache: true }, item.entry.text);
+    item.entry.outcome = (kept ? "cache:" : "hidden:") + hit.how;
+    ratingOf.set(item.a, { ...hit, key: item.urls[0] || item.u.href });
+    ratedAnchors.add(item.a);
+  }
+
   function processLinks() {
     if (!settings.enabled) return;
 
@@ -897,33 +938,7 @@
     memberIds = harvestMemberIds();
 
     // 1. eerst alle plekken markeren en een placeholder plaatsen
-    const items = slice.map((a) => {
-      a.dataset.knltbDone = "1";
-      const u = new URL(a.href, location.href);
-      const urls = candidateUrls(a, u);
-      const entry = {
-        text: norm(a.textContent),
-        href: a.getAttribute("href"),
-        tried: urls,
-        outcome: "pending",
-      };
-      registry.push(entry);
-      if (registry.length > 400) registry.splice(0, registry.length - 400);
-
-      // De badge komt IN de anchor te staan, dus a.textContent raakt daarna
-      // vervuild ("Mike VerhaarS:7,8265"). Nu vastleggen, niet later lezen.
-      if (!a.dataset.knltbName) {
-        a.dataset.knltbName = entry.text.replace(/\[[^\]]*\]/g, "").trim();
-      }
-
-      const holder = makeHolder();
-      // liefst binnen de naam-span, dan blijft de lay-out netjes
-      const nameSpan = a.querySelector(".nav-link__value") || a.querySelector("span");
-      if (nameSpan) nameSpan.appendChild(holder);
-      else a.insertAdjacentElement("afterend", holder);
-
-      return { a, u, urls, holder, entry, keys: [cacheKey(u.href), ...urls.map(cacheKey)] };
-    });
+    const items = slice.map(placeHolder);
 
     // 2. ÉÉN storage-lookup voor de hele pagina, en meteen alles tekenen
     //    wat al bekend is. Geen wachtrij, geen netwerk, geen wachttijd.
@@ -936,19 +951,8 @@
 
       for (const item of items) {
         const hit = item.keys.map((k) => store[k]).find(fresh);
-
-        if (!hit) {
-          misses.push(item);
-          continue;
-        }
-        if (hit.none) {
-          applyMiss(item, "NO_RATING_FOUND");
-          continue;
-        }
-        const kept = renderTags(item.holder, { ...hit, fromCache: true }, item.entry.text);
-        item.entry.outcome = (kept ? "cache:" : "hidden:") + hit.how;
-        ratingOf.set(item.a, { ...hit, key: item.urls[0] || item.u.href });
-        ratedAnchors.add(item.a);
+        if (hit) applyCached(item, hit);
+        else misses.push(item);
       }
 
       scheduleDeltas();
@@ -1736,6 +1740,97 @@
     if (observerRoot) observerRoot.takeRecords();
   }
 
+  /* Walkover: er is niet gespeeld, dus er valt niets te berekenen.
+     Altijd overslaan — ook in de doorrekening en het paneel. Staat er
+     op de pagina tóch een waarde bij, dan noemen we die in de tooltip;
+     verzwijgen wat de site zegt is geen optie, narekenen ook niet. */
+  function markWalkover(m, official) {
+    m.block.dataset.knltbDelta = "1";
+    if (paginaSoort().mutaties === false) return;
+    m.rows.forEach((row) => {
+      chipHost(row).appendChild(
+        deltaChip(
+          "open wo",
+          "w.o.",
+          "Walkover of verstek: er is niet gespeeld, dus hier wordt niets " +
+            "berekend en telt niets mee in de doorrekening." +
+            (official != null
+              ? "\n\nDe pagina zelf noemt hier " + signed(official) + "."
+              : "")
+        )
+      );
+    });
+  }
+
+  /* Doorgeschoven spelers zonder tegenstander.
+     Zo'n wedstrijd valt buiten de doorrekening — er is niets te rekenen
+     zolang de andere kant leeg is — en daardoor bleef de badge op de live
+     rating staan, terwijl die speler zijn vorige ronde wél gewonnen had.
+     Dus hier alsnog iedereen langs die nog niet is bijgewerkt. */
+  function refreshProjectedBadges(projection, matches, current) {
+    if (projection) {
+      for (const teams of projection.filled.values()) {
+        for (const team of teams) {
+          if (!Array.isArray(team)) continue;
+          const disc = team.length > 1 ? "D" : "S";
+
+          for (const p of team) {
+            if (!p.tagHost) continue;
+            const tag = p.tagHost.querySelector(".knltb-tag");
+            if (!tag || tag.classList.contains("step")) continue; // al gedaan
+            showCarried(p, disc, current(p, disc));
+          }
+        }
+      }
+    }
+
+    /* Doorgeschoven spelers in een wedstrijd die nog niet beslist is:
+       daar valt geen mutatie te tonen, maar wel de stand waarmee ze die
+       ronde ingaan. Bij een beslist duel heeft showStep het al gedaan. */
+    for (const m of matches) {
+      if (m.wonBy !== -1) continue;
+      const disc = m.isDouble ? "D" : "S";
+      for (const p of m.teams.flat()) {
+        if (!p.tagHost) continue;
+        const veld = p.tagHost.querySelector(".knltb-tag .v");
+        if (!veld) continue;
+        const nu = current(p, disc);
+        veld.textContent = f4(nu);
+        p.tagHost.querySelector(".knltb-tag").title =
+          p.name + " — doorgeschoven op basis van jouw keuze" +
+          "\nlive rating " + f4(p.start) +
+          (Math.abs(nu - p.start) > 1e-9 ? "\nna eerdere rondes " + f4(nu) : "");
+      }
+    }
+  }
+
+  /** Het overzichtspaneel na de doorrekening, met je eigen rij erbij zodra die er is. */
+  function showSummaryPanel(matches, totals, current, chain, stand) {
+    // het paneel heeft een eigen schakelaar; stapelen zegt alleen iets over
+    // hoe er gerekend wordt, niet of er een overzicht komt
+    if (!settings.showSummary) return;
+
+    // eigen rating op de achtergrond ophalen; zodra hij binnen is
+    // tekenen we het paneel opnieuw zodat je eigen rij erbij komt
+    if (settings.showMeInField && !ownData) ensureOwnData(scheduleDeltas);
+
+    /* Het paneel toont `start + som` als huidige stand, maar de beste- en
+       slechtste-geval-scenario's rekenen met `current()`. Zonder stapelen
+       is `stand` leeg en geeft die de live rating terug: jouw beste geval
+       zou dan gerekend worden tegen een tegenstander die twee regels lager
+       in hetzelfde paneel op een andere waarde staat. Hier zetten we de
+       meelopende stand alsnog gelijk. De wedstrijden zijn op dit punt al
+       getekend, dus de badges veranderen er niet meer van. */
+    if (!chain) for (const [k, t] of totals) stand.set(k, t.start + t.sum);
+
+    const pending = isDrawPage() ? matches.filter((m) => m.wonBy === -1) : [];
+    const rows = buildSummaryRows(matches, pending, totals, current);
+    if (rows.length) {
+      redrawField = rerunDeltas;
+      renderSummary(rows, pending.length);
+    }
+  }
+
   function annotateMatches() {
     if (!settings.enabled) return;
 
@@ -1785,26 +1880,8 @@
       const official = officialDelta(m.block);
       const subject = official != null ? pageSubject() : null;
 
-      /* Walkover: er is niet gespeeld, dus er valt niets te berekenen.
-         Altijd overslaan — ook in de doorrekening en het paneel. Staat er
-         op de pagina tóch een waarde bij, dan noemen we die in de tooltip;
-         verzwijgen wat de site zegt is geen optie, narekenen ook niet. */
       if (m.wo) {
-        m.block.dataset.knltbDelta = "1";
-        if (paginaSoort().mutaties === false) continue;
-        m.rows.forEach((row) => {
-          chipHost(row).appendChild(
-            deltaChip(
-              "open wo",
-              "w.o.",
-              "Walkover of verstek: er is niet gespeeld, dus hier wordt niets " +
-                "berekend en telt niets mee in de doorrekening." +
-                (official != null
-                  ? "\n\nDe pagina zelf noemt hier " + signed(official) + "."
-                  : "")
-            )
-          );
-        });
+        markWalkover(m, official);
         continue;
       }
       const A = m.teams[0].map((p) => (chain ? current(p, disc) : p.start));
@@ -1977,76 +2054,8 @@
       }
     }
 
-    /* Doorgeschoven spelers zonder tegenstander.
-       Zo'n wedstrijd valt buiten de doorrekening — er is niets te rekenen
-       zolang de andere kant leeg is — en daardoor bleef de badge op de live
-       rating staan, terwijl die speler zijn vorige ronde wél gewonnen had.
-       Dus hier alsnog iedereen langs die nog niet is bijgewerkt. */
-    if (projection) {
-      for (const teams of projection.filled.values()) {
-        for (const team of teams) {
-          if (!Array.isArray(team)) continue;
-          const disc = team.length > 1 ? "D" : "S";
-
-          for (const p of team) {
-            if (!p.tagHost) continue;
-            const tag = p.tagHost.querySelector(".knltb-tag");
-            if (!tag || tag.classList.contains("step")) continue; // al gedaan
-            showCarried(p, disc, current(p, disc));
-          }
-        }
-      }
-    }
-
-    /* Doorgeschoven spelers in een wedstrijd die nog niet beslist is:
-       daar valt geen mutatie te tonen, maar wel de stand waarmee ze die
-       ronde ingaan. Bij een beslist duel heeft showStep het al gedaan. */
-    for (const m of matches) {
-      if (m.wonBy !== -1) continue;
-      const disc = m.isDouble ? "D" : "S";
-      for (const p of m.teams.flat()) {
-        if (!p.tagHost) continue;
-        const veld = p.tagHost.querySelector(".knltb-tag .v");
-        if (!veld) continue;
-        const nu = current(p, disc);
-        veld.textContent = f4(nu);
-        p.tagHost.querySelector(".knltb-tag").title =
-          p.name + " — doorgeschoven op basis van jouw keuze" +
-          "\nlive rating " + f4(p.start) +
-          (Math.abs(nu - p.start) > 1e-9 ? "\nna eerdere rondes " + f4(nu) : "");
-      }
-    }
-
-    // het paneel heeft een eigen schakelaar; stapelen zegt alleen iets over
-    // hoe er gerekend wordt, niet of er een overzicht komt
-    if (!settings.showSummary) return;
-
-    // eigen rating op de achtergrond ophalen; zodra hij binnen is
-    // tekenen we het paneel opnieuw zodat je eigen rij erbij komt
-    if (settings.showMeInField && !ownData) {
-      ownRating().then((d) => {
-        if (d && !ownData) {
-          ownData = d;
-          scheduleDeltas();
-        }
-      });
-    }
-
-    /* Het paneel toont `start + som` als huidige stand, maar de beste- en
-       slechtste-geval-scenario's rekenen met `current()`. Zonder stapelen
-       is `stand` leeg en geeft die de live rating terug: jouw beste geval
-       zou dan gerekend worden tegen een tegenstander die twee regels lager
-       in hetzelfde paneel op een andere waarde staat. Hier zetten we de
-       meelopende stand alsnog gelijk. De wedstrijden zijn op dit punt al
-       getekend, dus de badges veranderen er niet meer van. */
-    if (!chain) for (const [k, t] of totals) stand.set(k, t.start + t.sum);
-
-    const pending = isDrawPage() ? matches.filter((m) => m.wonBy === -1) : [];
-    const rows = buildSummaryRows(matches, pending, totals, current);
-    if (rows.length) {
-      redrawField = rerunDeltas;
-      renderSummary(rows, pending.length);
-    }
+    refreshProjectedBadges(projection, matches, current);
+    showSummaryPanel(matches, totals, current, chain, stand);
   }
 
   /**
@@ -2121,40 +2130,17 @@
 
     if (!rows.some((r) => r.isSelf)) {
       if (!ownData) {
-        ownRating().then((d) => {
-          if (d && !ownData) {
-            ownData = d;
-            document.getElementById("knltb-summary")?.remove();
-            showEntryField();
-          }
+        ensureOwnData(() => {
+          document.getElementById("knltb-summary")?.remove();
+          showEntryField();
         });
       } else {
-        const mine = disc === "D" ? ownData.double : ownData.single;
-        if (mine != null && isFinite(mine)) {
-          const partner = partnerFor(mine);
-          const ratings = disc === "D" ? [mine, partner] : [mine];
-          const team = DSS.teamRating(ratings);
-
-          rows.push({
-            key: "self|" + disc, disc,
-            name:
-              (ownData.name || "jij") +
-              (disc === "D" ? partnerLabel() : "") +
-              " — niet ingeschreven",
-            names: [ownData.name || "jij"],
-            ratings,
-            start: team, now: team, best: team, worst: team,
-            played: 0, todo: 0, isSelf: true, virtual: true,
-          });
-        }
+        const row = selfRow(disc);
+        if (row) rows.push(row);
       }
     }
 
-    rows.sort((a, b) => a.start - b.start);
-    rows.forEach((r, i) => {
-      r.rank = i + 1;
-      r.fieldSize = rows.length;
-    });
+    rankRows(rows);
 
     redrawField = showEntryField;
     document.getElementById("knltb-summary")?.remove();
@@ -2208,21 +2194,14 @@
         });
       }
     } else if (!ownData) {
-      ownRating().then((d) => {
-        if (d && !ownData) {
-          ownData = d;
-          document.getElementById("knltb-summary")?.remove();
-          showFieldOnly();
-        }
+      ensureOwnData(() => {
+        document.getElementById("knltb-summary")?.remove();
+        showFieldOnly();
       });
     }
 
     // op sterkte sorteren; hier is er nog geen uitslag om op te ordenen
-    rows.sort((a, b) => a.start - b.start);
-    rows.forEach((r, i) => {
-      r.rank = i + 1;
-      r.fieldSize = rows.length;
-    });
+    rankRows(rows);
 
     redrawField = showFieldOnly;
     document.getElementById("knltb-summary")?.remove();
@@ -2344,6 +2323,47 @@
    */
   let ownData = null;
 
+  /** Eén speler doorgerekend over zijn resterende wedstrijden: nu, beste en slechtste geval. */
+  function scenario(row, pending, current) {
+    const disc = row.disc;
+    // som van de mutaties; bij stapelen is dat exact wat `stand` bijhoudt,
+    // zonder stapelen is het de enige bron
+    const now = row.start + (row.sum || 0);
+
+    // resterende wedstrijden van deze speler, op volgorde
+    const mine = pending.filter(
+      (m) =>
+        (m.isDouble ? "D" : "S") === disc &&
+        m.teams.some((t) => t.some((p) => p.key + "|" + disc === row.key))
+    );
+
+    let best = now;
+    let worst = now;
+
+    for (const m of mine) {
+      const sideIx = m.teams.findIndex((t) =>
+        t.some((p) => p.key + "|" + disc === row.key)
+      );
+      const own = m.teams[sideIx];
+      const opp = m.teams[1 - sideIx];
+      const oppR = opp.map((q) => current(q, disc));
+
+      for (const mode of ["best", "worst"]) {
+        const r = mode === "best" ? best : worst;
+        const ownR = own.map((q) => (q.key + "|" + disc === row.key ? r : current(q, disc)));
+
+        const res =
+          sideIx === 0 ? DSS.match(ownR, oppR) : DSS.match(oppR, ownR);
+        const side = sideIx === 0 ? res.a : res.b;
+
+        if (mode === "best") best = r + side.onWin;
+        else worst = r + side.onLoss;
+      }
+    }
+
+    return { now, best, worst, todo: mine.length };
+  }
+
   function buildSummaryRows(matches, pending, totals, current) {
     const seen = new Map();
 
@@ -2369,52 +2389,17 @@
     const rows = [];
 
     for (const row of seen.values()) {
-      const disc = row.disc;
-      // som van de mutaties; bij stapelen is dat exact wat `stand` bijhoudt,
-      // zonder stapelen is het de enige bron
-      const now = row.start + (row.sum || 0);
-
-      // resterende wedstrijden van deze speler, op volgorde
-      const mine = pending.filter(
-        (m) =>
-          (m.isDouble ? "D" : "S") === disc &&
-          m.teams.some((t) => t.some((p) => p.key + "|" + disc === row.key))
-      );
-
-      let best = now;
-      let worst = now;
-
-      for (const m of mine) {
-        const sideIx = m.teams.findIndex((t) =>
-          t.some((p) => p.key + "|" + disc === row.key)
-        );
-        const own = m.teams[sideIx];
-        const opp = m.teams[1 - sideIx];
-        const oppR = opp.map((q) => current(q, disc));
-
-        for (const mode of ["best", "worst"]) {
-          const r = mode === "best" ? best : worst;
-          const ownR = own.map((q) => (q.key + "|" + disc === row.key ? r : current(q, disc)));
-
-          const res =
-            sideIx === 0 ? DSS.match(ownR, oppR) : DSS.match(oppR, ownR);
-          const side = sideIx === 0 ? res.a : res.b;
-
-          if (mode === "best") best = r + side.onWin;
-          else worst = r + side.onLoss;
-        }
-      }
-
+      const { now, best, worst, todo } = scenario(row, pending, current);
       rows.push({
         key: row.key,
         name: row.name,
-        disc,
+        disc: row.disc,
         start: row.start,
         now,
         best,
         worst,
         played: row.played,
-        todo: mine.length,
+        todo,
       });
     }
 
@@ -2430,30 +2415,8 @@
        waar je zou staan. Zo'n rij speelt geen wedstrijden en verandert
        dus ook niets aan de doorrekening. */
     if (settings.showMeInField && out.length && !out.some((r) => r.isSelf) && ownData) {
-      const disc = out[0].disc;
-      const mine = disc === "D" ? ownData.double : ownData.single;
-      if (mine != null && isFinite(mine)) {
-        const ratings = disc === "D" ? [mine, partnerFor(mine)] : [mine];
-        const team = DSS.teamRating(ratings);
-        out.push({
-          key: "self|" + disc,
-          name:
-            (ownData.name || "jij") +
-            (disc === "D" ? partnerLabel() : "") +
-            " — niet ingeschreven",
-          names: [ownData.name || "jij"],
-          ratings,
-          disc,
-          start: team,
-          now: team,
-          best: team,
-          worst: team,
-          played: 0,
-          todo: 0,
-          isSelf: true,
-          virtual: true,
-        });
-      }
+      const row = selfRow(out[0].disc);
+      if (row) out.push(row);
     }
 
     /* Positie in het deelnemersveld. Niet uit de onderdeeltitel — die heeft
@@ -2468,13 +2431,7 @@
       if (!byDisc.has(r.disc)) byDisc.set(r.disc, []);
       byDisc.get(r.disc).push(r);
     }
-    for (const group of byDisc.values()) {
-      group.sort((a, b) => a.start - b.start); // laag = sterk
-      group.forEach((r, i) => {
-        r.rank = i + 1;
-        r.fieldSize = group.length;
-      });
-    }
+    for (const group of byDisc.values()) rankRows(group);
 
     // wie het meest is opgeschoven bovenaan; daarna wie nog het meest kan.
     // De hypothetische eigen rij hoort onderaan, hij hoort niet bij de uitslag.
@@ -2535,6 +2492,25 @@
     return " + " + (settings.partnerName ? settings.partnerName + " " : "partner ") + f4(p);
   }
 
+  /** Jouw eigen rij als hypothetische deelnemer — null zonder bruikbare rating. */
+  function selfRow(disc) {
+    const mine = disc === "D" ? ownData.double : ownData.single;
+    if (mine == null || !isFinite(mine)) return null;
+    const ratings = disc === "D" ? [mine, partnerFor(mine)] : [mine];
+    const team = DSS.teamRating(ratings);
+    return {
+      key: "self|" + disc, disc,
+      name:
+        (ownData.name || "jij") +
+        (disc === "D" ? partnerLabel() : "") +
+        " — niet ingeschreven",
+      names: [ownData.name || "jij"],
+      ratings,
+      start: team, now: team, best: team, worst: team,
+      played: 0, todo: 0, isSelf: true, virtual: true,
+    };
+  }
+
   /** URL van het eigen profiel, uit het menu rechtsboven. */
   function ownProfileUrl() {
     const a =
@@ -2571,6 +2547,16 @@
     return ownRatingPromise;
   }
 
+  /** Eigen rating op de achtergrond ophalen; zodra hij binnen is, opnieuw tekenen. */
+  function ensureOwnData(redraw) {
+    ownRating().then((d) => {
+      if (d && !ownData) {
+        ownData = d;
+        redraw();
+      }
+    });
+  }
+
   /**
    * Enkel of dubbel? Bij een onderdeel zonder wedstrijden (een deelnemers-
    * lijst) valt dat niet uit de opstelling af te leiden, maar wel uit de
@@ -2597,6 +2583,210 @@
       worst: vals[vals.length - 1],
       median: Site.median(vals),
     };
+  }
+
+  /** Op sterkte sorteren (laag = sterk) en ieders plek in het veld erbij zetten. */
+  function rankRows(rows) {
+    rows.sort((a, b) => a.start - b.start);
+    rows.forEach((r, i) => {
+      r.rank = i + 1;
+      r.fieldSize = rows.length;
+    });
+  }
+
+  /** Het invoerveld voor je dubbelpartner, onder de veldregel van het paneel. */
+  function partnerInput(me) {
+    const row = document.createElement("div");
+    row.className = "knltb-summary__partner";
+
+    const lbl = document.createElement("label");
+    lbl.textContent = "partner ";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.placeholder = "rating of link naar speler";
+    input.value =
+      settings.partnerRating != null && isFinite(settings.partnerRating)
+        ? f4(settings.partnerRating)
+        : "";
+    input.title =
+      "Je beoogde dubbelpartner. Mag een rating zijn (6,4314) of een\n" +
+      "verwijzing naar de speler:\n" +
+      "  · een profiellink /player-profile/<uuid>\n" +
+      "  · een toernooilink /sport/player.aspx?…\n" +
+      "  · een bondsnummer, bv. 30340969\n\n" +
+      "Teamrating = het gemiddelde van jullie twee.\n" +
+      "Leeg laten = rekenen met een partner van jouw eigen sterkte.";
+
+    const save = (rating, name) => {
+      settings.partnerRating = rating;
+      settings.partnerName = name;
+      Site.store.merge("settings", { partnerRating: rating, partnerName: name });
+      redrawField();
+    };
+
+    const apply = async () => {
+      const raw = input.value;
+      input.classList.remove("bad");
+
+      if (!norm(raw)) return save(null, null);
+
+      input.classList.add("busy");
+      try {
+        const { rating, name } = await resolvePartner(raw);
+        input.classList.remove("busy");
+        save(rating, name);
+      } catch (err) {
+        input.classList.remove("busy");
+        input.classList.add("bad");
+        input.title =
+          {
+            BUITEN_BEREIK: "Een rating ligt tussen 1 en 10.",
+            GEEN_ORG: "Kan op deze pagina geen organisatiecode vinden — plak een profiellink.",
+            ANDERE_SITE: "Alleen links van mijnknltb.toernooi.nl.",
+            ONBEGREPEN: "Niet herkend als rating, link of bondsnummer.",
+            GEEN_DUBBEL: "Op dat profiel staat geen dubbelrating.",
+          }[err.message] || ("Opzoeken mislukt: " + err.message);
+      }
+    };
+
+    input.addEventListener("change", apply);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") apply();
+    });
+
+    lbl.appendChild(input);
+    row.appendChild(lbl);
+
+    const hint = document.createElement("span");
+    hint.className = "knltb-summary__hint";
+    hint.textContent =
+      (settings.partnerName ? settings.partnerName + " · " : "") +
+      "teamrating " + f4(me.start);
+    row.appendChild(hint);
+
+    return row;
+  }
+
+  /** De tabel van het paneel; welke kolommen erin staan hangt af van `mode`. */
+  function summaryTable(rows, mode, versus) {
+    const table = document.createElement("table");
+    table.className = "knltb-summary__table";
+
+    const thead = document.createElement("tr");
+    for (const h of mode === "scenarios"
+      ? ["", "nu", "beste", "slechtste"]
+      : mode === "field"
+      ? ["", "rating", "winst", "verlies"]
+      : ["", "start", "nu", ""]) {
+      const th = document.createElement("th");
+      th.textContent = h;
+      thead.appendChild(th);
+    }
+    table.appendChild(thead);
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+
+      const name = document.createElement("td");
+      name.className = "knltb-summary__name" + (r.isSelf ? " is-self" : "");
+      name.textContent = (r.rank ? r.rank + ". " : "") + r.name;
+      name.title =
+        r.name +
+        (r.club ? " · " + r.club : "") +
+        (r.seed ? " · geplaatst " + r.seed : "") +
+        " — " + (r.disc === "D" ? "dubbel" : "enkel") +
+        "\nstart " + f4(r.start) +
+        (r.rank ? "\n" + r.rank + "e van " + r.fieldSize + " op sterkte" : "") +
+        "\n" + r.played + " gespeeld, " + r.todo + " te gaan";
+      tr.appendChild(name);
+
+      const cell = (text, cls, title) => {
+        const td = document.createElement("td");
+        td.className = "knltb-summary__val " + (cls || "");
+        td.textContent = text;
+        if (title) td.title = title;
+        return td;
+      };
+
+      const moved = r.now - r.start;
+
+      if (mode === "scenarios") {
+        tr.appendChild(
+          cell(f4(r.now), moved < -1e-9 ? "gain" : moved > 1e-9 ? "drop" : "",
+            "stand na " + r.played + " gespeelde wedstrijd(en): " + signed(moved))
+        );
+        tr.appendChild(
+          cell(r.todo ? f4(r.best) : "–", "gain",
+            r.todo ? "alle " + r.todo + " resterende gewonnen: " + signed(r.best - r.now) : "niets meer te spelen")
+        );
+        tr.appendChild(
+          cell(r.todo ? f4(r.worst) : "–", "drop",
+            r.todo ? "alle " + r.todo + " resterende verloren: " + signed(r.worst - r.now) : "niets meer te spelen")
+        );
+      } else if (mode === "field") {
+        tr.appendChild(
+          cell(
+            f4(r.start),
+            "",
+            r.ratings && r.ratings.length > 1
+              ? "teamrating " + f4(r.start) + " = gemiddelde van " +
+                r.ratings.map(f4).join(" en ")
+              : ""
+          )
+        );
+
+        const v = versus(r);
+        if (v) {
+          const kans = Math.round(v.prob * 100) + "% winstkans tegen " + r.name;
+          tr.appendChild(cell(signed(v.onWin), "gain", kans));
+          tr.appendChild(cell(signed(v.onLoss), "drop", kans));
+        } else {
+          tr.appendChild(cell(r.isSelf ? "—" : "", "muted"));
+          tr.appendChild(cell("", "muted"));
+        }
+      } else {
+        tr.appendChild(cell(f4(r.start)));
+        tr.appendChild(
+          cell(f4(r.now), moved < -1e-9 ? "gain" : moved > 1e-9 ? "drop" : "")
+        );
+        tr.appendChild(cell(signed(moved), moved < 0 ? "gain" : "drop"));
+      }
+
+      table.appendChild(tr);
+    }
+    return table;
+  }
+
+  /** De toelichting onder de tabel: hoe er gerekend is en wat de kolommen zeggen. */
+  function summaryNote(rows, mode) {
+    const note = document.createElement("div");
+    note.className = "knltb-summary__note";
+    note.textContent = mode === "field"
+      ? "Veld op sterkte; lagere rating = sterker. De twee kolommen zijn wat een " +
+        "partij tégen die speler met jouw rating doet — winst levert een min op, " +
+        "want je zakt richting de 1. Tegen een sterkere tegenstander valt er veel " +
+        "te halen en weinig te verliezen." +
+        (rows.some((r) => r.disc === "D")
+          ? " Bij dubbel gerekend alsof beide kanten een partner van gelijke sterkte hebben."
+          : "")
+      : mode === "scenarios"
+      ? "Beste en slechtste geval = alle resterende wedstrijden gewonnen of verloren, " +
+        "elke volgende gerekend met de dan bijgestelde rating. Een “verwachte” " +
+        "kolom ontbreekt met opzet: die is exact gelijk aan “nu”, want " +
+        "K·(P−1)·P + K·P·(1−P) = 0. Het DSS is zuiver — meer spelen levert " +
+        "vanzelf niets op."
+      : !isKnockoutPage()
+      ? "Elke wedstrijd apart gerekend vanaf de nu getoonde rating en daarna " +
+        "opgeteld. Alleen in een afvalschema ligt de volgorde van de wedstrijden " +
+        "vast; hier niet, en dan zou doorstapelen getallen opleveren die nergens " +
+        "op slaan. Is dit toernooi al verwerkt door de KNLTB, dan zit het " +
+        "resultaat al in die startwaarde en telt deze berekening het dubbel."
+      : "Chronologisch doorgerekend vanaf de nu getoonde rating. Is dit toernooi al " +
+        "verwerkt door de KNLTB, dan zit het resultaat al in die startwaarde en telt " +
+        "deze berekening het dubbel.";
+    return note;
   }
 
   /* Overzichtspaneel: stand na de gespeelde rondes + wat er nog op het spel staat. */
@@ -2705,197 +2895,20 @@
 
       // in het dubbel bepaalt je partner de helft van de teamrating, dus
       // laat hem invullen in plaats van een aanname op te leggen
-      if (me && me.virtual && me.disc === "D" && redrawField) {
-        const row = document.createElement("div");
-        row.className = "knltb-summary__partner";
-
-        const lbl = document.createElement("label");
-        lbl.textContent = "partner ";
-
-        const input = document.createElement("input");
-        input.type = "text";
-        input.inputMode = "decimal";
-        input.placeholder = "rating of link naar speler";
-        input.value =
-          settings.partnerRating != null && isFinite(settings.partnerRating)
-            ? f4(settings.partnerRating)
-            : "";
-        input.title =
-          "Je beoogde dubbelpartner. Mag een rating zijn (6,4314) of een\n" +
-          "verwijzing naar de speler:\n" +
-          "  · een profiellink /player-profile/<uuid>\n" +
-          "  · een toernooilink /sport/player.aspx?…\n" +
-          "  · een bondsnummer, bv. 30340969\n\n" +
-          "Teamrating = het gemiddelde van jullie twee.\n" +
-          "Leeg laten = rekenen met een partner van jouw eigen sterkte.";
-
-        const save = (rating, name) => {
-          settings.partnerRating = rating;
-          settings.partnerName = name;
-          Site.store.merge("settings", { partnerRating: rating, partnerName: name });
-          redrawField();
-        };
-
-        const apply = async () => {
-          const raw = input.value;
-          input.classList.remove("bad");
-
-          if (!norm(raw)) return save(null, null);
-
-          input.classList.add("busy");
-          try {
-            const { rating, name } = await resolvePartner(raw);
-            input.classList.remove("busy");
-            save(rating, name);
-          } catch (err) {
-            input.classList.remove("busy");
-            input.classList.add("bad");
-            input.title =
-              {
-                BUITEN_BEREIK: "Een rating ligt tussen 1 en 10.",
-                GEEN_ORG: "Kan op deze pagina geen organisatiecode vinden — plak een profiellink.",
-                ANDERE_SITE: "Alleen links van mijnknltb.toernooi.nl.",
-                ONBEGREPEN: "Niet herkend als rating, link of bondsnummer.",
-                GEEN_DUBBEL: "Op dat profiel staat geen dubbelrating.",
-              }[err.message] || ("Opzoeken mislukt: " + err.message);
-          }
-        };
-
-        input.addEventListener("change", apply);
-        input.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") apply();
-        });
-
-        lbl.appendChild(input);
-        row.appendChild(lbl);
-
-        const hint = document.createElement("span");
-        hint.className = "knltb-summary__hint";
-        hint.textContent =
-          (settings.partnerName ? settings.partnerName + " · " : "") +
-          "teamrating " + f4(me.start);
-        row.appendChild(hint);
-
-        box.appendChild(row);
-      }
+      if (me && me.virtual && me.disc === "D" && redrawField) box.appendChild(partnerInput(me));
     }
 
-    const showScenarios = pendingCount > 0;
-    const fieldOnly = rows.every((r) => r.played === 0 && r.todo === 0);
+    // wat er in de kolommen komt: de scenario's zolang er nog gespeeld
+    // wordt, anders het kale veld, anders start en stand
+    const mode =
+      pendingCount > 0
+        ? "scenarios"
+        : rows.every((r) => r.played === 0 && r.todo === 0)
+        ? "field"
+        : "played";
 
-    const table = document.createElement("table");
-    table.className = "knltb-summary__table";
-
-    const thead = document.createElement("tr");
-    for (const h of showScenarios
-      ? ["", "nu", "beste", "slechtste"]
-      : fieldOnly
-      ? ["", "rating", "winst", "verlies"]
-      : ["", "start", "nu", ""]) {
-      const th = document.createElement("th");
-      th.textContent = h;
-      thead.appendChild(th);
-    }
-    table.appendChild(thead);
-
-    for (const r of rows) {
-      const tr = document.createElement("tr");
-
-      const name = document.createElement("td");
-      name.className = "knltb-summary__name" + (r.isSelf ? " is-self" : "");
-      name.textContent = (r.rank ? r.rank + ". " : "") + r.name;
-      name.title =
-        r.name +
-        (r.club ? " · " + r.club : "") +
-        (r.seed ? " · geplaatst " + r.seed : "") +
-        " — " + (r.disc === "D" ? "dubbel" : "enkel") +
-        "\nstart " + f4(r.start) +
-        (r.rank ? "\n" + r.rank + "e van " + r.fieldSize + " op sterkte" : "") +
-        "\n" + r.played + " gespeeld, " + r.todo + " te gaan";
-      tr.appendChild(name);
-
-      const cell = (text, cls, title) => {
-        const td = document.createElement("td");
-        td.className = "knltb-summary__val " + (cls || "");
-        td.textContent = text;
-        if (title) td.title = title;
-        return td;
-      };
-
-      const moved = r.now - r.start;
-
-      if (showScenarios) {
-        tr.appendChild(
-          cell(f4(r.now), moved < -1e-9 ? "gain" : moved > 1e-9 ? "drop" : "",
-            "stand na " + r.played + " gespeelde wedstrijd(en): " + signed(moved))
-        );
-        tr.appendChild(
-          cell(r.todo ? f4(r.best) : "–", "gain",
-            r.todo ? "alle " + r.todo + " resterende gewonnen: " + signed(r.best - r.now) : "niets meer te spelen")
-        );
-        tr.appendChild(
-          cell(r.todo ? f4(r.worst) : "–", "drop",
-            r.todo ? "alle " + r.todo + " resterende verloren: " + signed(r.worst - r.now) : "niets meer te spelen")
-        );
-      } else if (fieldOnly) {
-        tr.appendChild(
-          cell(
-            f4(r.start),
-            "",
-            r.ratings && r.ratings.length > 1
-              ? "teamrating " + f4(r.start) + " = gemiddelde van " +
-                r.ratings.map(f4).join(" en ")
-              : ""
-          )
-        );
-
-        const v = versus(r);
-        if (v) {
-          const kans = Math.round(v.prob * 100) + "% winstkans tegen " + r.name;
-          tr.appendChild(cell(signed(v.onWin), "gain", kans));
-          tr.appendChild(cell(signed(v.onLoss), "drop", kans));
-        } else {
-          tr.appendChild(cell(r.isSelf ? "—" : "", "muted"));
-          tr.appendChild(cell("", "muted"));
-        }
-      } else {
-        tr.appendChild(cell(f4(r.start)));
-        tr.appendChild(
-          cell(f4(r.now), moved < -1e-9 ? "gain" : moved > 1e-9 ? "drop" : "")
-        );
-        tr.appendChild(cell(signed(moved), moved < 0 ? "gain" : "drop"));
-      }
-
-      table.appendChild(tr);
-    }
-    box.appendChild(table);
-
-    const note = document.createElement("div");
-    note.className = "knltb-summary__note";
-    note.textContent = fieldOnly
-      ? "Veld op sterkte; lagere rating = sterker. De twee kolommen zijn wat een " +
-        "partij tégen die speler met jouw rating doet — winst levert een min op, " +
-        "want je zakt richting de 1. Tegen een sterkere tegenstander valt er veel " +
-        "te halen en weinig te verliezen." +
-        (rows.some((r) => r.disc === "D")
-          ? " Bij dubbel gerekend alsof beide kanten een partner van gelijke sterkte hebben."
-          : "")
-      : showScenarios
-      ? "Beste en slechtste geval = alle resterende wedstrijden gewonnen of verloren, " +
-        "elke volgende gerekend met de dan bijgestelde rating. Een “verwachte” " +
-        "kolom ontbreekt met opzet: die is exact gelijk aan “nu”, want " +
-        "K·(P−1)·P + K·P·(1−P) = 0. Het DSS is zuiver — meer spelen levert " +
-        "vanzelf niets op."
-      : !isKnockoutPage()
-      ? "Elke wedstrijd apart gerekend vanaf de nu getoonde rating en daarna " +
-        "opgeteld. Alleen in een afvalschema ligt de volgorde van de wedstrijden " +
-        "vast; hier niet, en dan zou doorstapelen getallen opleveren die nergens " +
-        "op slaan. Is dit toernooi al verwerkt door de KNLTB, dan zit het " +
-        "resultaat al in die startwaarde en telt deze berekening het dubbel."
-      : "Chronologisch doorgerekend vanaf de nu getoonde rating. Is dit toernooi al " +
-        "verwerkt door de KNLTB, dan zit het resultaat al in die startwaarde en telt " +
-        "deze berekening het dubbel.";
-    box.appendChild(note);
+    box.appendChild(summaryTable(rows, mode, versus));
+    box.appendChild(summaryNote(rows, mode));
 
     document.body.appendChild(box);
   }
