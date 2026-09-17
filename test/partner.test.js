@@ -9,6 +9,11 @@
  *
  *   jij 7,0000 + partner van gelijke sterkte  ->  7,0000
  *   jij 7,0000 + partner 6,0000               ->  6,5000
+ *
+ * Op een schemapagina zonder uitslagen komt het veld uit de opgehaalde
+ * ratings van de spelers zelf, en dan is jouw rij je eigen dubbelrating —
+ * geen teamrating. Een partnerveld hoort daar dan ook niet: invullen zou
+ * niets veranderen.
  */
 const fs = require("fs");
 const path = require("path");
@@ -49,17 +54,40 @@ ${koppel(13, "Speler C", "Speler D", "5,8000", "6,0000")}
 </tbody></table>
 </body></html>`;
 
-const PROFIEL = `<div class="page-head"><div class="media__content">
-  <h2 class="media__title"><span class="nav-link__value">${IK.naam}</span></h2>
+const profiel = (s) => `<div class="page-head"><div class="media__content">
+  <h2 class="media__title"><span class="nav-link__value">${s.naam}</span></h2>
   <div id="mediaContentSubinfo">
-    <span title="Enkel" class="tag-duo"><span class="tag-duo__title">6</span><span class="tag-duo__value">${IK.enkel}</span></span>
-    <span title="Dubbel" class="tag-duo"><span class="tag-duo__title">6</span><span class="tag-duo__value">${IK.dubbel}</span></span>
+    <span title="Enkel" class="tag-duo"><span class="tag-duo__title">6</span><span class="tag-duo__value">${s.enkel}</span></span>
+    <span title="Dubbel" class="tag-duo"><span class="tag-duo__title">6</span><span class="tag-duo__value">${s.dubbel}</span></span>
   </div></div></div>`;
 
-/** De inschrijvingspagina, met het Chrome-decor dat jsdom niet heeft. */
-function venster(instellingen) {
-  const win = new JSDOM(PAGINA, {
-    url: "https://mijnknltb.toernooi.nl/sport/event.aspx?id=" + TOERNOOI + "&event=5",
+// een poule van hetzelfde dubbelonderdeel, nog zonder uitslagen: drie losse
+// spelers, elk met een dubbelrating op zijn profiel — geen van drieën 7,0000
+const VELD = [
+  { uuid: "ffffffff-0000-0000-0000-000000000011", naam: "Speler A", enkel: "6,5000", dubbel: "6,6000" },
+  { uuid: "ffffffff-0000-0000-0000-000000000012", naam: "Speler B", enkel: "6,9000", dubbel: "6,8000" },
+  { uuid: "ffffffff-0000-0000-0000-000000000013", naam: "Speler C", enkel: "5,7000", dubbel: "5,8000" },
+];
+const schakel = (s) =>
+  `<li class="list__item"><a href="/player-profile/${s.uuid}" class="nav-link"><span class="nav-link__value">${s.naam}</span></a></li>`;
+
+const POULE = `<!doctype html><html><body>
+<div class="masthead"><div class="dropdown-menu"><ul class="dropdown-list">
+  <li><a href="/player-profile/${IK.uuid}" title="Mijn profiel">Mijn profiel</a></li>
+</ul></div></div>
+<div class="page-subhead"><h4 class="media__title">Tennis HD6 poule A</h4></div>
+<ul class="list">
+${VELD.map(schakel).join("\n")}
+</ul>
+</body></html>`;
+
+const INSCHRIJVING_URL = "https://mijnknltb.toernooi.nl/sport/event.aspx?id=" + TOERNOOI + "&event=5";
+const POULE_URL = "https://mijnknltb.toernooi.nl/tournament/" + TOERNOOI + "/draw/4";
+
+/** Een pagina van het onderdeel, met het Chrome-decor dat jsdom niet heeft. */
+function venster(instellingen, pagina = PAGINA, adres = INSCHRIJVING_URL) {
+  const win = new JSDOM(pagina, {
+    url: adres,
     pretendToBeVisual: true,
     runScripts: "outside-only",
   }).window;
@@ -90,7 +118,8 @@ function venster(instellingen) {
   const opgehaald = [];
   win.fetch = (url) => {
     opgehaald.push(String(url));
-    const html = String(url).includes(IK.uuid) ? PROFIEL : "<html><body></body></html>";
+    const wie = [IK, ...VELD].find((s) => String(url).includes(s.uuid));
+    const html = wie ? profiel(wie) : "<html><body></body></html>";
     return Promise.resolve({
       ok: true, status: 200, url: String(url),
       headers: { get: () => null }, text: () => Promise.resolve(html),
@@ -127,6 +156,7 @@ function lees(win) {
 
   const a = venster({ partnerRating: 6, partnerName: "Speler P" });
   const b = venster({});
+  const c = venster({ partnerRating: 6, partnerName: "Speler P" }, POULE, POULE_URL);
   await wacht(1500);
 
   ok(a.fouten.length === 0 && b.fouten.length === 0, "geen fouten", a.fouten.concat(b.fouten).join(" | "));
@@ -152,6 +182,20 @@ function lees(win) {
   ok(zonder.team === "7,0000", "en de teamrating is je eigen dubbelrating", zonder.team);
   ok(zonder.invoer === "", "het invoerveld is leeg", JSON.stringify(zonder.invoer));
   ok(zonder.hint === "teamrating 7,0000", "de hint rekent zonder partner", zonder.hint);
+
+  /* ---- 3. een veld van losse ratings: geen partnerveld -------------------- */
+
+  const veld = lees(c.win);
+  ok(c.fouten.length === 0, "geen fouten op de poulepagina", c.fouten.join(" | "));
+  ok(c.opgehaald.length === 4, "de drie spelers en het eigen profiel opgehaald",
+     c.opgehaald.map((u) => u.replace(/^https?:\/\/[^/]+/, "")).join(" , "));
+  ok(veld.paneel && veld.rij != null,
+     "ook daar sta je als hypothetische deelnemer in het veld", JSON.stringify(veld));
+  ok(veld.rij != null && !veld.rij.includes("partner"),
+     "maar je rij is je eigen rating, zonder partner", veld.rij);
+  ok(veld.team === "7,0000", "geen teamrating: 7,0000 staat er onbewerkt", veld.team);
+  ok(veld.invoer === null,
+     "en dus geen partnerveld — invullen zou hier niets veranderen", JSON.stringify(veld.invoer));
 
   console.log(fail ? "\n" + fail + " test(s) mislukt" : "\nalle tests geslaagd");
   process.exit(fail ? 1 : 0);

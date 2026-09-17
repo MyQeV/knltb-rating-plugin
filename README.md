@@ -36,7 +36,7 @@ Achter elke spelersnaam komt een badge: `E 6,31 · D 5,87`
 ## Instellingen
 
 Klik op het extensie-icoon: aan/uit, enkel/dubbel tonen, max. spelers per pagina,
-cacheduur (standaard 7 dagen), cache legen, pagina opnieuw scannen.
+cacheduur (standaard 8 uur), cache legen, pagina opnieuw scannen.
 
 ## Ontwikkelen
 

@@ -243,7 +243,7 @@
     Site.store.set(obj).catch((e) => {
       // vol of anderszins geweigerd: niet stilzwijgend voorbijgaan
       log("opslaan mislukt:", e.message);
-      pruneCache(true);
+      pruneCache(true).catch(() => {});
     });
   }
 
@@ -268,7 +268,7 @@
       const { prunedAt } = await Site.store.get("prunedAt");
       if (!force && prunedAt && now - prunedAt < PRUNE_EVERY_MS) return;
 
-      Site.store.set({ prunedAt: now });
+      Site.store.set({ prunedAt: now }).catch(() => {});
 
       const all = await Site.store.get(null);
       const ttl = Math.max(1, settings.cacheTtlHours) * 36e5;
@@ -2895,7 +2895,7 @@
 
       // in het dubbel bepaalt je partner de helft van de teamrating, dus
       // laat hem invullen in plaats van een aanname op te leggen
-      if (me && me.virtual && me.disc === "D" && redrawField) box.appendChild(partnerInput(me));
+      if (me && me.virtual && me.disc === "D" && me.ratings && redrawField) box.appendChild(partnerInput(me));
     }
 
     // wat er in de kolommen komt: de scenario's zolang er nog gespeeld

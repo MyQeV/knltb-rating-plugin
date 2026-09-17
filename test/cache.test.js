@@ -9,7 +9,9 @@
  *      één hoort te volstaan.
  *   3. Mislukt een schrijfactie (opslag vol), dan wordt er opgeruimd, en dat
  *      leest de hele opslag in. Mislukken er twee tegelijk, dan hoort er één
- *      opruimbeurt te lopen — niet twee.
+ *      opruimbeurt te lopen — niet twee. Een volle opslag weigert óók de
+ *      opruimstempel, en soms is hij niet eens leesbaar: dat blijft binnen
+ *      de opruimbeurt, er bereikt geen afwijzing het proces.
  *   4. Uitgelogd wordt er niets opgehaald, maar wat al in de cache staat mag
  *      gewoon getoond worden — ook als de speler hier onder een andere naam
  *      staat dan waaronder hij bewaard is.
@@ -23,6 +25,10 @@ const ok = (c, l, e = "") => {
   console.log((c ? "  ok   " : "  FOUT ") + l + (e ? "  " + e : ""));
   if (!c) fail++;
 };
+
+// een afwijzing zonder afvanger zou hier landen; dat mag nooit gebeuren
+let onafgevangen = 0;
+process.on("unhandledRejection", () => onafgevangen++);
 
 const root = path.join(__dirname, "..");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
@@ -102,8 +108,11 @@ const stroom = (url, stukken) => {
 };
 
 /** Eén pagina, met het Chrome-decor dat jsdom niet heeft. De opslag houdt
-    bij wat erheen gaat, en kan de eerste `faal` ratingrecords weigeren. */
-function venster(html, opslag, opHaal, faal = 0) {
+    bij wat erheen gaat, en kan de eerste `faal` schrijfacties weigeren —
+    welke ook, want een volle opslag weigert alles. Met `onleesbaar` gooit
+    het inlezen van de hele opslag, zoals Chrome doet als de extensie
+    intussen herladen is. */
+function venster(html, opslag, opHaal, faal = 0, onleesbaar = false) {
   const win = new JSDOM(html, {
     url: SITE + "/tournament/" + TOERNOOI,
     pretendToBeVisual: true,
@@ -120,6 +129,7 @@ function venster(html, opslag, opHaal, faal = 0) {
           if (keys === null) {
             // alles inlezen duurt even; precies dáár lopen twee opruimbeurten elkaar in de weg
             gelezen++;
+            if (onleesbaar) throw new Error("Extension context invalidated.");
             setTimeout(() => cb({ ...opslag }), 20);
             return;
           }
@@ -129,7 +139,7 @@ function venster(html, opslag, opHaal, faal = 0) {
         },
         set(o, cb) {
           schrijfacties.push(o);
-          if (faal > 0 && Object.keys(o).some((k) => k.startsWith("r:"))) {
+          if (faal > 0) {
             faal--;
             win.chrome.runtime.lastError = { message: "QUOTA_BYTES quota exceeded" };
             cb();
@@ -220,27 +230,40 @@ const spelerVan = (url) => {
 
   const nu = Date.now();
   const r = (n) => "r:" + SITE + "/player-profile/eeeeeeee-0000-0000-0000-0000000000" + n;
-  const opslag = {
+  const volleOpslag = () => ({
     settings: {},
     prunedAt: nu, // net opgeruimd, dus de opstartbeurt slaat over
     selfProfile: SITE + "/player-profile/eeeeeeee-0000-0000-0000-0000000000a0",
     [r("a1")]: { name: "Speler X", single: 6, ts: nu - 9 * 36e5 }, // verlopen
     [r("a2")]: { name: "Speler Y", single: 6 }, // beschadigd: geen tijdstempel
     [r("a3")]: { name: "Speler Z", single: 6, ts: nu }, // vers
-  };
+  });
+  const opslag = volleOpslag();
+  // vol is vol: de twee ratingrecords én de opruimstempel worden geweigerd
   const d = venster(
     pagina([link(SPELERS[1]), link(SPELERS[2])]), opslag,
-    (url) => antwoord(url, profiel(spelerVan(url))), 2
+    (url) => antwoord(url, profiel(spelerVan(url))), 3
+  );
+  // en is de opslag daarbovenop niet eens leesbaar, dan valt de opruimbeurt
+  // stil — zonder dat er een afwijzing tot het proces doordringt
+  const f = venster(
+    pagina([link(SPELERS[1]), link(SPELERS[2])]), volleOpslag(),
+    (url) => antwoord(url, profiel(spelerVan(url))), 3, true
   );
   await wacht(500);
 
   ok(d.fouten.length === 0, "geen fouten", d.fouten.join(" | "));
-  ok(d.teWeigeren() === 0, "beide schrijfacties zijn geweigerd", d.teWeigeren() + " weigeringen over");
+  ok(d.teWeigeren() === 0, "de twee ratingrecords en de opruimstempel zijn geweigerd", d.teWeigeren() + " weigeringen over");
   ok(d.tel(".knltb-tag--single") === 2, "de ratings staan er desondanks", d.tel(".knltb-tag--single") + " badges");
   ok(d.gelezen() === 1, "de opslag is één keer helemaal ingelezen", d.gelezen() + " keer");
   const over = Object.keys(opslag).filter((k) => k.startsWith("r:"));
   ok(!(r("a1") in opslag) && !(r("a2") in opslag), "verlopen en beschadigd zijn weg", over.join(" , "));
   ok(r("a3") in opslag && "selfProfile" in opslag, "vers en niet-cache blijven staan", Object.keys(opslag).join(" , "));
+
+  ok(f.fouten.length === 0, "onleesbare opslag: geen fouten", f.fouten.join(" | "));
+  ok(f.teWeigeren() === 0, "ook daar zijn alle drie de schrijfacties geweigerd", f.teWeigeren() + " weigeringen over");
+  ok(f.tel(".knltb-tag--single") === 2, "en de ratings staan er toch", f.tel(".knltb-tag--single") + " badges");
+  ok(onafgevangen === 0, "geen enkele afwijzing bereikt het proces onafgevangen", onafgevangen + " onafgevangen");
 
   /* ---- 4. uitgelogd: wat al bekend is wordt getoond, onder welke naam ook --
      Eén tegelijk, in paginavolgorde. A staat eerst met H2H-knop (bewaard
