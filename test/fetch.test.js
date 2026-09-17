@@ -9,6 +9,14 @@
  *   3. De rem (maxPerMinute) werd per taak afgerekend, terwijl één taak tot
  *      zes verzoeken kan doen: drie kandidaten, een volledige herhaling,
  *      twee stappen doorlopen. De rem hoort per verzoek te tellen.
+ *   4. Een 429 van de server: de wachtrij valt stil en de geweigerde speler
+ *      blijft wachten op zijn herkansing — hij wordt niet als "geen rating"
+ *      afgeboekt.
+ *   5. Tien spelers, twee tegelijk: nooit meer dan twee verzoeken open, en
+ *      ze vertrekken in de volgorde van de pagina. Met vijf per minuut gaan
+ *      er precies vijf de deur uit.
+ *   6. hoverOnly: niets ophalen tot de muis over een naam gaat, en dan
+ *      alleen die ene.
  */
 const fs = require("fs");
 const path = require("path");
@@ -36,6 +44,10 @@ const SPELERS = {
   6: { uuid: "eeeeeeee-0000-0000-0000-000000000006", naam: "Speler F", rating: "6,2000" },
   // zijn profielpagina toont geen rating; die staat pas op het Rating-tabblad
   7: { uuid: "eeeeeeee-0000-0000-0000-000000000007", naam: "Speler G", rating: "6,7000" },
+  8: { uuid: "eeeeeeee-0000-0000-0000-000000000008", naam: "Speler H", rating: "6,1000" },
+  9: { uuid: "eeeeeeee-0000-0000-0000-000000000009", naam: "Speler I", rating: "6,3000" },
+  10: { uuid: "eeeeeeee-0000-0000-0000-000000000010", naam: "Speler J", rating: "6,4000" },
+  11: { uuid: "eeeeeeee-0000-0000-0000-000000000011", naam: "Speler K", rating: "6,8000" },
 };
 
 const link = (nr) =>
@@ -67,6 +79,13 @@ const antwoord = (url, html) =>
   Promise.resolve({
     ok: true, status: 200, url: String(url),
     headers: { get: () => null }, text: () => Promise.resolve(html),
+  });
+
+/* De server duwt terug: 429 (of 503), zonder bruikbare pagina. */
+const afgewezen = (url, status) =>
+  Promise.resolve({
+    ok: false, status, url: String(url),
+    headers: { get: () => null }, text: () => Promise.resolve(""),
   });
 
 /* Hetzelfde, maar als stroom in stukken — zo leest readBody hem echt, en
@@ -212,6 +231,109 @@ const spelerVan = (url) => {
   const viaTab = c.win.document.querySelector(".knltb-tag--single .v");
   ok(viaTab && viaTab.textContent === SPELERS[7].rating,
      "en de rating van het tabblad staat achter de naam", viaTab ? viaTab.textContent : "geen");
+
+  /* ---- 4. de server duwt terug: stilvallen, niet afboeken ----------------
+     Eén tegelijk, drie spelers, en het eerste verzoek krijgt een 429. Dan
+     hoort de hele wachtrij stil te vallen en de geweigerde speler te wachten
+     op zijn herkansing — niet als "geen rating" afgedaan te worden. De pauze
+     is 30 s en kent geen instelling (backoffMs staat vast in content.js),
+     dus de herkansing zelf valt buiten de test. Zonder de pauze zou de
+     herkansing na één seconde komen en zouden de andere twee meteen gaan;
+     na anderhalve seconde is het verschil dus te zien. */
+
+  let geweigerd = 0;
+  const d = venster([1, 2, 3], { concurrency: 1 }, (url) =>
+    geweigerd++ === 0 ? afgewezen(url, 429) : antwoord(url, profiel(spelerVan(url)))
+  );
+  await wacht(1500);
+
+  ok(d.fouten.length === 0, "geen fouten", d.fouten.join(" | "));
+  ok(d.opgehaald.length === 1,
+     "na een 429 gaat er anderhalve seconde lang niets meer de deur uit",
+     d.opgehaald.length + " verzoeken");
+  ok(d.tel(".knltb-tags.error") === 0 && d.tel(".knltb-tag") === 0,
+     "niemand is als 'geen rating' afgeboekt",
+     d.tel(".knltb-tags.error") + " fout, " + d.tel(".knltb-tag") + " badges");
+  const wachtend = [...d.win.document.querySelectorAll(".knltb-tags.loading")].map((el) => el.textContent);
+  ok(wachtend.join(",") === "⏳,…,…",
+     "de geweigerde speler wacht op zijn herkansing, de andere twee staan nog in de rij",
+     wachtend.join(","));
+
+  /* ---- 5. tien spelers, twee tegelijk ------------------------------------
+     De antwoorden houden we vast en laten we één voor één los. Zo is te zien
+     hoeveel er tegelijk openstaan en in welke volgorde ze vertrekken: nooit
+     meer dan twee, en in de volgorde van de pagina — die staat hier expres
+     niet op nummer. */
+
+  const TIEN = [4, 1, 6, 2, 9, 3, 11, 5, 10, 8];
+  const open = [];
+  let tegelijk = 0;
+  let hoogste = 0;
+  const e = venster(TIEN, { concurrency: 2 }, (url) =>
+    new Promise((los) => {
+      tegelijk++;
+      hoogste = Math.max(hoogste, tegelijk);
+      open.push(() => {
+        tegelijk--;
+        los(antwoord(url, profiel(spelerVan(url))));
+      });
+    })
+  );
+  await wacht(300);
+
+  ok(e.opgehaald.length === 2,
+     "twee verzoeken staan open, de andere acht wachten", e.opgehaald.length + " open");
+
+  // één voor één loslaten; na elk antwoord mag er precies één bij
+  for (let ronde = 0; ronde < 40 && (open.length || e.opgehaald.length < TIEN.length); ronde++) {
+    if (open.length) open.shift()();
+    await wacht(30);
+  }
+  await wacht(300);
+
+  const volgorde = e.opgehaald.map((u) => TIEN.find((nr) => u.includes(SPELERS[nr].uuid)));
+  ok(volgorde.join(",") === TIEN.join(","),
+     "de verzoeken vertrekken in de volgorde van de pagina", volgorde.join(","));
+  ok(hoogste === 2, "en er staan er nooit meer dan twee tegelijk open", "hoogstens " + hoogste);
+  ok(e.tel(".knltb-tag--single") === TIEN.length, "alle tien krijgen een badge",
+     e.tel(".knltb-tag--single") + " van " + TIEN.length);
+  ok(e.fouten.length === 0, "geen fouten", e.fouten.join(" | "));
+
+  /* Dezelfde tien met vijf per minuut: precies vijf gaan de deur uit. Het
+     zesde verzoek wacht op de bucket — twaalf seconden per token, dus dat
+     zien we hier niet aflopen. */
+  const f = venster(TIEN, { concurrency: 2, maxPerMinute: 5 }, (url) => antwoord(url, profiel(spelerVan(url))));
+  await wacht(1000);
+
+  ok(f.opgehaald.length === 5,
+     "vijf per minuut: het zesde verzoek wacht op de bucket", f.opgehaald.length + " verzoeken");
+  ok(f.tel(".knltb-tag--single") === 5 && f.tel(".knltb-tags.loading") === 5,
+     "vijf badges, vijf nog op laden",
+     f.tel(".knltb-tag--single") + " badges, " + f.tel(".knltb-tags.loading") + " op laden");
+
+  /* ---- 6. hoverOnly: pas ophalen als de muis over de naam gaat ----------- */
+
+  const g = venster([1, 2, 3], { hoverOnly: true }, (url) => antwoord(url, profiel(spelerVan(url))));
+  await wacht(500);
+
+  ok(g.opgehaald.length === 0,
+     "muis-over-modus: bij het laden wordt niets opgehaald", g.opgehaald.length + " verzoeken");
+  ok(g.tel(".knltb-tags.idle") === 3, "alle drie de badges wachten op de muis",
+     g.tel(".knltb-tags.idle") + " van 3");
+
+  const tweede = g.win.document.querySelectorAll("a.nav-link")[1];
+  tweede.dispatchEvent(new g.win.Event("mouseenter"));
+  await wacht(500);
+
+  ok(g.opgehaald.length === 1 && g.opgehaald[0].includes(SPELERS[2].uuid),
+     "muis over de tweede naam: één verzoek, voor die speler",
+     g.opgehaald.map((u) => u.replace(/^.*\/player-profile\//, "")).join(" , "));
+  const gehoverd = tweede.querySelector(".knltb-tag--single .v");
+  ok(gehoverd && gehoverd.textContent === SPELERS[2].rating,
+     "en zijn rating staat achter zijn naam", gehoverd ? gehoverd.textContent : "geen");
+  ok(g.tel(".knltb-tags.idle") === 2, "de andere twee wachten nog op de muis",
+     g.tel(".knltb-tags.idle") + " over");
+  ok(g.fouten.length === 0, "geen fouten", g.fouten.join(" | "));
 
   console.log(fail ? "\n" + fail + " test(s) mislukt" : "\nalle tests geslaagd");
   process.exit(fail ? 1 : 0);
