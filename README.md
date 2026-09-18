@@ -57,8 +57,17 @@ met die nieuwe ratings.
 - Je keuzes blijven lokaal en verdwijnen zodra je de pagina herlaadt. Er wordt niets
   verstuurd en niets opgeslagen bij de KNLTB.
 
-Werkt alleen bij een afvalschema, en alleen bij wedstrijden zonder uitslag. Een walkover of
-verstek (`w.o.`) telt niet mee voor de rating en is dus niet aanklikbaar.
+Alleen wedstrijden zonder uitslag zijn aanklikbaar. Een walkover of verstek (`w.o.`) telt
+niet mee voor de rating en doet dus niet mee.
+
+## Ook in de wedstrijdenlijst
+
+Hetzelfde werkt op het wedstrijdschema van een speeldag. Per partij staan beide kanten met
+hun rating, de winstkans en dezelfde keuzechip, ook door de onderdelen heen — heren dubbel,
+gemengd en dames naast elkaar. Klik je een kant aan, dan schuift die partij naar de stand
+erna, net als in het schema.
+
+![Winnaars doorklikken in de wedstrijdenlijst van een speeldag](docs/wedstrijden.gif)
 
 ## Wat er verder bij een wedstrijd komt te staan
 
@@ -143,6 +152,39 @@ Klik op het extensie-icoon. Alles staat daar aan of uit:
 | Debug-logging | uitgebreide uitvoer in de console |
 
 Verder: **Pagina opnieuw scannen** en **Cache legen**.
+
+## Cache: wat wordt bewaard, hoe lang, en hoe je het wist
+
+Elke opgehaalde rating gaat in de lokale opslag van de extensie (`chrome.storage.local`).
+Dat gebeurt alleen op jouw computer; er gaat niets naar een server.
+
+**Hoe lang** — standaard **8 uur**, in te stellen van 1 uur tot een jaar. Daarna wordt de
+waarde niet meer gebruikt en haalt de extensie hem opnieuw op. Verlopen vermeldingen
+blijven nog even liggen: pas bij een opruimbeurt gaan ze er echt uit.
+
+**Opruimen** gaat vanzelf, hooguit eens per 6 uur, want daarvoor moet de hele opslag
+gelezen worden. Verlopen en beschadigde vermeldingen gaan weg, en blijven er dan nog meer
+dan **5000** over, dan sneuvelen de oudste. Loopt de opslag vol, dan wordt er meteen
+opgeruimd in plaats van bij de volgende beurt.
+
+Eén speler kan onder meerdere sleutels staan: naast zijn landelijke profiel komt er per
+toernooi een toernooigebonden adres bij. Het aantal vermeldingen ligt dus hoger dan het
+aantal spelers dat je bent tegengekomen.
+
+**Wissen** kan op twee plekken, en allebei raken ze **alleen de ratings** — je instellingen,
+partnerrating en de rest blijven staan:
+
+- **Cache legen** in de popup. Wist alle opgeslagen ratings en scant de pagina meteen
+  opnieuw, dus je ziet direct verse cijfers.
+- **Opgeslagen spelers** op het dashboard. Daar staat wat er in de cache zit, doorzoekbaar
+  op naam, met een knop om alles te wissen — handig als je eerst wilt zien wát er ligt.
+
+De cache overleeft het afsluiten van je browser. Verwijder je de extensie, dan gaat hij mee.
+
+Let op wat **Pagina opnieuw scannen** wél en niet doet: die bouwt de badges opnieuw op uit
+de cache, dus je krijgt dezelfde cijfers terug. Gebruik hem als er badges ontbreken nadat de
+site een stuk pagina heeft herladen. Wil je écht verse ratings, dan moet de cache leeg — of
+je wacht tot de bewaartijd verstreken is.
 
 ## Rustig aan met de site
 
