@@ -38,35 +38,11 @@ Achter elke spelersnaam komt een badge: `E 6,31 · D 5,87`
 Klik op het extensie-icoon: aan/uit, enkel/dubbel tonen, max. spelers per pagina,
 cacheduur (standaard 8 uur), cache legen, pagina opnieuw scannen.
 
-## Ontwikkelen
-
-```
-npm install
-npm test
-```
-
-De tests draaien in Node met jsdom tegen vaste stukjes HTML van de site; er is geen
-login voor nodig. Alleen `layout.test.js` meet in een echte browser; die wordt
-overgeslagen tenzij je `npm i -D playwright && npx playwright install chromium` hebt gedaan
-(of `KNLTB_CHROME` naar een eigen Chrome laat wijzen).
-
-Namen, clubs en nummers van andere spelers in de testdata zijn verzonnen; alleen de
-auteur staat er met eigen gegevens in.
-
-`npm run pack` maakt `knltb-rating.zip` uit de laatste commit — dat bestand hoort bij
-een [release](https://github.com/MyQeV/knltb-rating-plugin/releases), niet in de repo.
-
 ## Problemen melden
 
 Open een [issue](https://github.com/MyQeV/knltb-rating-plugin/issues). De knop
 **Diagnose** in de popup verzamelt wat er op de pagina gevonden is; die uitvoer bevat
 spelersnamen en je eigen profiel-id, dus haal weg wat je niet wilt delen.
-
-## Nog te doen
-
-- head-to-head calculator: twee spelers kiezen en de nieuwe rating berekenen
-  (KNLTB publiceert de formule niet; die moeten we afleiden of overnemen van
-  de officiële rekentool)
 
 ## Licentie
 
