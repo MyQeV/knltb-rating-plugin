@@ -7,9 +7,7 @@ zet op `mijnknltb.toernooi.nl` — zodat je niet meer per speler hoeft door te k
 > Tournament Software. De extensie leest alleen pagina's die je zelf al kunt zien
 > als je bent ingelogd; er wordt niets naar een externe server gestuurd.
 
-![Een afvalschema met ratings, winstkansen en de doorrekening](docs/schema-overzicht.jpg)
-
-> In alle afbeeldingen hieronder zijn de spelersnamen vervangen door `Speler 1`,
+> In de afbeeldingen hieronder zijn de spelersnamen vervangen door `Speler 1`,
 > `Speler 2`, enzovoort. De ratings en uitslagen zijn wel echt.
 
 ## Installeren (Brave én Chrome, zelfde stappen)
